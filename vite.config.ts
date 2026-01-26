@@ -4,4 +4,12 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/agent-dashboard/',
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3456',
+        changeOrigin: true,
+      }
+    }
+  }
 })
