@@ -2,6 +2,7 @@
  * Multi-Agent Command Center Dashboard
  * Real-time agent coordination with WebSocket events
  */
+import React from 'react'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useAgentStore } from './stores/agentStore'
 import { useIssueStore } from './stores/issueStore'
@@ -10,8 +11,11 @@ import { KanbanBoard } from './components/kanban'
 import { AgentGrid } from './components/agents'
 import { ActivityFeed } from './components/activity'
 import { ConnectionStatus } from './components/ConnectionStatus'
+import { AgentMonitor } from './components/monitor'
 
 function App() {
+  const [currentView, setCurrentView] = React.useState('dashboard')
+  
   // Initialize WebSocket connection
   const { status, requestSnapshot } = useWebSocket({
     url: 'ws://localhost:3456/ws/agentops',
@@ -41,6 +45,31 @@ function App() {
               </svg>
               Multi-Agent Command Center
             </h1>
+            
+            {/* Navigation Tabs */}
+            <nav className="flex gap-2 ml-4">
+              <button
+                onClick={() => setCurrentView('dashboard')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  currentView === 'dashboard' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                Dashboard
+              </button>
+              <button
+                onClick={() => setCurrentView('agent-monitor')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  currentView === 'agent-monitor' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                Agenten Monitor
+              </button>
+            </nav>
+            
             <ConnectionStatus />
           </div>
 
@@ -73,10 +102,10 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="p-6 space-y-6">
+      <main>
         {/* Connection Warning */}
-        {status !== 'connected' && (
-          <div className="bg-yellow-900/30 border border-yellow-600 rounded-lg p-4 flex items-center gap-3">
+        {status !== 'connected' && currentView === 'dashboard' && (
+          <div className="m-6 bg-yellow-900/30 border border-yellow-600 rounded-lg p-4 flex items-center gap-3">
             <svg className="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
@@ -93,53 +122,59 @@ function App() {
           </div>
         )}
 
-        {/* Agent Grid */}
-        <AgentGrid />
+        {currentView === 'agent-monitor' ? (
+          <AgentMonitor />
+        ) : (
+          <div className="p-6 space-y-6">
+            {/* Agent Grid */}
+            <AgentGrid />
 
-        {/* Kanban Board */}
-        <KanbanBoard />
+            {/* Kanban Board */}
+            <KanbanBoard />
 
-        {/* Activity Feed */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            {/* Additional stats or content can go here */}
-            <div className="bg-gray-900 rounded-lg p-4">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                Quick Start
-              </h2>
-              <div className="space-y-3 text-sm text-gray-300">
-                <div className="bg-gray-800 rounded p-3">
-                  <h3 className="font-medium text-white mb-2">1. Start the API Server</h3>
-                  <code className="bg-gray-900 px-2 py-1 rounded text-green-400">
-                    cd api && npm start
-                  </code>
-                </div>
-                <div className="bg-gray-800 rounded p-3">
-                  <h3 className="font-medium text-white mb-2">2. Create an Agent</h3>
-                  <code className="bg-gray-900 px-2 py-1 rounded text-blue-400 text-xs block whitespace-pre">
+            {/* Activity Feed */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                {/* Additional stats or content can go here */}
+                <div className="bg-gray-900 rounded-lg p-4">
+                  <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Quick Start
+                  </h2>
+                  <div className="space-y-3 text-sm text-gray-300">
+                    <div className="bg-gray-800 rounded p-3">
+                      <h3 className="font-medium text-white mb-2">1. Start the API Server</h3>
+                      <code className="bg-gray-900 px-2 py-1 rounded text-green-400">
+                        cd api && npm start
+                      </code>
+                    </div>
+                    <div className="bg-gray-800 rounded p-3">
+                      <h3 className="font-medium text-white mb-2">2. Create an Agent</h3>
+                      <code className="bg-gray-900 px-2 py-1 rounded text-blue-400 text-xs block whitespace-pre">
 {`curl -X POST http://localhost:3456/api/agents \\
   -H "Content-Type: application/json" \\
   -d '{"id":"agent-1","name":"Agent Alpha"}'`}
-                  </code>
-                </div>
-                <div className="bg-gray-800 rounded p-3">
-                  <h3 className="font-medium text-white mb-2">3. Create an Issue</h3>
-                  <code className="bg-gray-900 px-2 py-1 rounded text-purple-400 text-xs block whitespace-pre">
+                      </code>
+                    </div>
+                    <div className="bg-gray-800 rounded p-3">
+                      <h3 className="font-medium text-white mb-2">3. Create an Issue</h3>
+                      <code className="bg-gray-900 px-2 py-1 rounded text-purple-400 text-xs block whitespace-pre">
 {`curl -X POST http://localhost:3456/api/issues \\
   -H "Content-Type: application/json" \\
   -d '{"id":"issue-1","number":1,"title":"Test Issue","projectId":"test"}'`}
-                  </code>
+                      </code>
+                    </div>
+                  </div>
                 </div>
+              </div>
+              <div>
+                <ActivityFeed maxItems={15} />
               </div>
             </div>
           </div>
-          <div>
-            <ActivityFeed maxItems={15} />
-          </div>
-        </div>
+        )}
       </main>
 
       {/* Footer */}
