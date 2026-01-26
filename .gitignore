@@ -3,26 +3,25 @@ node_modules/
 
 # Build output
 dist/
-build/
 
-# Logs
-*.log
-npm-debug.log*
-
-# Environment
+# Local env files
 .env
 .env.local
+.env.*.local
 
-# Editor
+# Editor directories and files
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db
 
-# Cache
-.cache/
-.parcel-cache/
+# Test coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
