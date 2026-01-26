@@ -11,12 +11,14 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:all": "npm test && cd api && npm test"
   },
   "dependencies": {
     "@playwright/test": "^1.58.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "zustand": "^5.0.10"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -24,6 +26,7 @@
     "@types/node": "^25.0.10",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.16",
     "jsdom": "^27.4.0",

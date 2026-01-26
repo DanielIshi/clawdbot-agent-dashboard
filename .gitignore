@@ -25,3 +25,11 @@ coverage/
 # Logs
 *.log
 npm-debug.log*
+
+# Cache
+.cache/
+.parcel-cache/
+api/data/
+*.db
+*.db-shm
+*.db-wal

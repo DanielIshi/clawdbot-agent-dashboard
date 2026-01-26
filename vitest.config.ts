@@ -6,10 +6,15 @@ export default defineConfig({
     jsxImportSource: 'react'
   })],
   test: {
-    environment: 'jsdom',
     globals: true,
+    environment: 'jsdom', // Use jsdom for React component tests
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      exclude: ['node_modules/', 'src/test/']
+    }
   },
   esbuild: {
     jsxFactory: 'React.createElement',
