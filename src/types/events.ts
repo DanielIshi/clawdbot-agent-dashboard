@@ -22,11 +22,13 @@ export type EventType =
   | 'issue.unblocked'
   | 'issue.assigned'
   | 'issue.unassigned'
+  | 'issue.completed'
   | 'agent.status_changed'
   | 'agent.assigned'
   | 'agent.unassigned'
   | 'system.snapshot'
   | 'system.error'
+  | 'system.alert'
 
 // Client message types
 export type ClientMessageType =

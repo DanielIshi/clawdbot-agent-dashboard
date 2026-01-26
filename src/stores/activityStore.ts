@@ -81,6 +81,14 @@ function eventToMessage(event: EventEnvelope): { message: string; type: Activity
       }
     }
 
+    case 'issue.completed': {
+      const issue = payload.issue as { number?: number; title?: string }
+      return {
+        message: `✓ Issue #${issue?.number} completed: ${issue?.title?.slice(0, 30)}...`,
+        type: 'success'
+      }
+    }
+
     case 'agent.status_changed': {
       const agent = payload.agent as { name?: string }
       const reason = payload.reason as string | undefined
@@ -96,6 +104,15 @@ function eventToMessage(event: EventEnvelope): { message: string; type: Activity
       return {
         message: `System error: ${payload.message || 'Unknown error'}`,
         type: 'error'
+      }
+    }
+
+    case 'system.alert': {
+      const level = payload.level as string
+      const levelIcon = level === 'critical' ? '🚨' : level === 'error' ? '❌' : level === 'warning' ? '⚠️' : 'ℹ️'
+      return {
+        message: `${levelIcon} ${payload.message}`,
+        type: level === 'critical' || level === 'error' ? 'error' : level === 'warning' ? 'warning' : 'info'
       }
     }
 

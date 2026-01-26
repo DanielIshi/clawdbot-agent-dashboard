@@ -77,6 +77,7 @@ export const EventTypes = {
   ISSUE_UNBLOCKED: 'issue.unblocked',
   ISSUE_ASSIGNED: 'issue.assigned',
   ISSUE_UNASSIGNED: 'issue.unassigned',
+  ISSUE_COMPLETED: 'issue.completed',
 
   // Agent events
   AGENT_STATUS_CHANGED: 'agent.status_changed',
@@ -85,7 +86,8 @@ export const EventTypes = {
 
   // System events
   SYSTEM_SNAPSHOT: 'system.snapshot',
-  SYSTEM_ERROR: 'system.error'
+  SYSTEM_ERROR: 'system.error',
+  SYSTEM_ALERT: 'system.alert'
 }
 
 export default { createEventEnvelope, validateEnvelope, EventTypes }

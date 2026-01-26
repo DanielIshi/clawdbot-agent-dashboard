@@ -4,7 +4,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useActivityStore } from '../stores/activityStore'
-import { processServerMessage, processEvent } from '../lib/eventProcessor'
+import { processServerMessage, processEvent, setGapDetectionCallback } from '../lib/eventProcessor'
 import type { ClientMessage, ServerMessage, EventEnvelope } from '../types/events'
 
 interface UseWebSocketOptions {
@@ -217,6 +217,19 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const ping = useCallback(() => {
     send({ type: 'ping' })
   }, [send])
+
+  // Setup gap detection callback (Issue #25)
+  useEffect(() => {
+    setGapDetectionCallback((currentSeq, expectedSeq) => {
+      console.log(`[WebSocket] Gap detected, requesting replay from seq ${currentSeq}`)
+      // Request replay of missing events
+      requestReplay(currentSeq)
+    })
+
+    return () => {
+      setGapDetectionCallback(() => {}) // Clear callback
+    }
+  }, [requestReplay])
 
   // Auto-connect on mount
   useEffect(() => {

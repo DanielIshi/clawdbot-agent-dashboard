@@ -389,6 +389,100 @@ app.delete('/api/issues/:id/block', (req, res) => {
   res.json(issue)
 })
 
+// Complete issue (Issue #9)
+app.put('/api/issues/:id/complete', (req, res) => {
+  const issue = state.issues.get(req.params.id)
+
+  if (!issue) {
+    return res.status(404).json({ error: 'Issue not found' })
+  }
+
+  const sm = new IssueStateMachine(issue)
+
+  // Allow completion from review state (normal flow) or force complete
+  const { force } = req.body
+  if (!force && !sm.canTransition('done')) {
+    return res.status(400).json({
+      error: `Cannot complete issue in state '${issue.state}'. Move to 'review' first or use force=true`,
+      validTransitions: sm.getValidTransitions()
+    })
+  }
+
+  const previousState = issue.state
+  const previousAgent = issue.assignedAgentId
+
+  // Transition to done
+  issue.state = 'done'
+  issue.completedAt = new Date().toISOString()
+  issue.updatedAt = issue.completedAt
+
+  // Unassign agent
+  if (previousAgent) {
+    const agent = state.agents.get(previousAgent)
+    if (agent) {
+      agent.currentIssueId = null
+      agent.status = 'idle'
+      agent.lastActivity = new Date().toISOString()
+    }
+    issue.assignedAgentId = null
+  }
+
+  emitEvent(EventTypes.ISSUE_COMPLETED, issue.projectId, {
+    previous_state: previousState,
+    previous_agent_id: previousAgent,
+    completion_time: issue.completedAt,
+    issue
+  }, { issueId: issue.id, agentId: previousAgent })
+
+  res.json(issue)
+})
+
+// ==================== System Routes (Issue #12) ====================
+
+// Send system alert
+app.post('/api/system/alert', (req, res) => {
+  const { level, message, projectId, metadata } = req.body
+
+  if (!message) {
+    return res.status(400).json({ error: 'Alert message required' })
+  }
+
+  const validLevels = ['info', 'warning', 'error', 'critical']
+  const alertLevel = validLevels.includes(level) ? level : 'info'
+
+  const event = emitEvent(EventTypes.SYSTEM_ALERT, projectId || 'system', {
+    level: alertLevel,
+    message,
+    metadata: metadata || {},
+    source: 'api'
+  })
+
+  res.status(201).json({
+    success: true,
+    event_id: event.event_id,
+    level: alertLevel,
+    message
+  })
+})
+
+// Get system status
+app.get('/api/system/status', (req, res) => {
+  const wss = app.get('wss')
+  res.json({
+    status: 'online',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    counts: {
+      agents: state.agents.size,
+      issues: state.issues.size,
+      events: eventLog.getEventCount(),
+      currentSeq: eventLog.getCurrentSeq()
+    },
+    websocket: wss ? getStats(wss) : null
+  })
+})
+
 // ==================== Event Routes ====================
 
 // Get events (for replay)

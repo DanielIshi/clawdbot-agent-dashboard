@@ -9,12 +9,56 @@ import { useIssueStore } from '../stores/issueStore'
 import { useActivityStore } from '../stores/activityStore'
 import { useConnectionStore } from '../stores/connectionStore'
 
+// Gap detection callback (Issue #25)
+let gapDetectionCallback: ((currentSeq: number, expectedSeq: number) => void) | null = null
+
+/**
+ * Set callback for gap detection
+ */
+export function setGapDetectionCallback(callback: (currentSeq: number, expectedSeq: number) => void): void {
+  gapDetectionCallback = callback
+}
+
+/**
+ * Detect sequence gaps (Issue #25)
+ */
+function detectGap(eventSeq: number, currentSeq: number): boolean {
+  // If currentSeq is 0, this is first event - no gap
+  if (currentSeq === 0) return false
+
+  // Expected next seq is currentSeq + 1
+  const expectedSeq = currentSeq + 1
+
+  // If event seq is greater than expected, we have a gap
+  if (eventSeq > expectedSeq) {
+    console.warn(`[EventProcessor] Gap detected! Expected seq ${expectedSeq}, got ${eventSeq}. Missing ${eventSeq - expectedSeq} events.`)
+
+    if (gapDetectionCallback) {
+      gapDetectionCallback(currentSeq, eventSeq)
+    }
+
+    return true
+  }
+
+  return false
+}
+
 /**
  * Process a single event and update relevant stores
  */
 export function processEvent(event: EventEnvelope): void {
   const activityStore = useActivityStore.getState()
   const connectionStore = useConnectionStore.getState()
+
+  // Gap detection (Issue #25)
+  const hasGap = detectGap(event.seq, connectionStore.currentSeq)
+  if (hasGap) {
+    // Activity for gap detection
+    activityStore.addActivity({
+      message: `Gap detected: missing events between ${connectionStore.currentSeq} and ${event.seq}`,
+      type: 'warning'
+    })
+  }
 
   // Update sequence number
   connectionStore.updateSeq(event.seq)
@@ -56,6 +100,10 @@ export function processEvent(event: EventEnvelope): void {
       handleIssueUnassigned(payload)
       break
 
+    case 'issue.completed':
+      handleIssueCompleted(payload)
+      break
+
     case 'agent.status_changed':
       handleAgentStatusChanged(payload)
       break
@@ -70,6 +118,14 @@ export function processEvent(event: EventEnvelope): void {
 
     case 'system.snapshot':
       handleSnapshot(payload)
+      break
+
+    case 'system.alert':
+      handleSystemAlert(payload)
+      break
+
+    case 'system.error':
+      handleSystemError(payload)
       break
 
     default:
@@ -145,6 +201,59 @@ function handleAgentAssigned(agentId: string, payload: Record<string, unknown>):
 
 function handleAgentUnassigned(agentId: string): void {
   useAgentStore.getState().unassignIssueFromAgent(agentId)
+}
+
+// Issue completed handler (Issue #9)
+function handleIssueCompleted(payload: Record<string, unknown>): void {
+  const issue = payload.issue as Issue
+  const previousAgentId = payload.previous_agent_id as string | null
+
+  if (issue) {
+    useIssueStore.getState().upsertIssue(issue)
+  }
+
+  // Release the agent
+  if (previousAgentId) {
+    const agentStore = useAgentStore.getState()
+    const agent = agentStore.agents.get(previousAgentId)
+    if (agent) {
+      agentStore.upsertAgent({
+        ...agent,
+        status: 'idle',
+        currentIssueId: null,
+        lastActivity: new Date().toISOString()
+      })
+    }
+  }
+}
+
+// System alert handler (Issue #12)
+function handleSystemAlert(payload: Record<string, unknown>): void {
+  const level = payload.level as string
+  const message = payload.message as string
+
+  // Map alert level to activity type
+  const typeMap: Record<string, 'info' | 'success' | 'warning' | 'error'> = {
+    info: 'info',
+    warning: 'warning',
+    error: 'error',
+    critical: 'error'
+  }
+
+  useActivityStore.getState().addActivity({
+    message: `[ALERT] ${message}`,
+    type: typeMap[level] || 'warning'
+  })
+}
+
+// System error handler
+function handleSystemError(payload: Record<string, unknown>): void {
+  const message = payload.message as string || 'Unknown system error'
+
+  useActivityStore.getState().addActivity({
+    message: `[ERROR] ${message}`,
+    type: 'error'
+  })
 }
 
 function handleSnapshot(payload: Record<string, unknown>): void {
