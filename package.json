@@ -8,11 +8,13 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:all": "npm test && cd api && npm test"
   },
   "dependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "zustand": "^5.0.10"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -20,6 +22,7 @@
     "@types/node": "^25.0.10",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.16",
     "jsdom": "^27.4.0",
