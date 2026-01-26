@@ -17,6 +17,37 @@ interface Project {
   error?: string
 }
 
+interface ClawdBotStatus {
+  status: string
+  timestamp: string
+  auth: {
+    activeProfile: string
+    oauthToken: {
+      exists: boolean
+      expires: string
+      hoursRemaining: number
+      minutesRemaining: number
+      isValid: boolean
+      needsRenewal: boolean
+    }
+    apiKeyFallback: {
+      exists: boolean
+      type: string
+    }
+  }
+  rateLimit: {
+    detected: boolean
+    occurrences: number
+    lastDetected: string | null
+    recentErrors: string[]
+  }
+  recommendations: Array<{
+    severity: string
+    message: string
+    action: string
+  }>
+}
+
 const PROJECTS = [
   { name: 'Thai-Blitz', repo: 'DanielIshi/thai-blitz-ai-language-coach' },
   { name: 'Icon-Selection', repo: 'DanielIshi/icon-selection-ui' },
@@ -24,11 +55,15 @@ const PROJECTS = [
 ]
 
 const REFRESH_INTERVAL = 10000 // 10 Sekunden
+const API_BASE = ''
+  ? 'http://localhost:3456'
+  : 'http://127.0.0.1:3456'
 
 function App() {
   const [projects, setProjects] = useState<Project[]>(
     PROJECTS.map(p => ({ ...p, issues: [], loading: true }))
   )
+  const [clawdBotStatus, setClawdBotStatus] = useState<ClawdBotStatus | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [recentActivity, setRecentActivity] = useState<string[]>([])
 
@@ -50,6 +85,17 @@ function App() {
     }
   }
 
+  const fetchClawdBotStatus = async (): Promise<void> => {
+    try {
+      const res = await fetch(`${API_BASE}/api/clawdbot-status`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setClawdBotStatus(data)
+    } catch (e) {
+      console.error('Failed to fetch ClawdBot status:', e)
+    }
+  }
+
   const refreshData = async () => {
     const newProjects = await Promise.all(
       PROJECTS.map(async (p) => {
@@ -57,12 +103,12 @@ function App() {
         return { ...p, issues, loading: false }
       })
     )
-    
+
     // Detect new/changed issues
     const now = new Date()
     const oneMinuteAgo = new Date(now.getTime() - 60000)
     const recent: string[] = []
-    
+
     newProjects.forEach(p => {
       p.issues.forEach(issue => {
         const updated = new Date(issue.updated_at)
@@ -71,12 +117,13 @@ function App() {
         }
       })
     })
-    
+
     if (recent.length > 0) {
       setRecentActivity(prev => [...recent, ...prev].slice(0, 20))
     }
-    
+
     setProjects(newProjects)
+    await fetchClawdBotStatus()
     setLastUpdate(new Date())
   }
 
@@ -99,16 +146,106 @@ function App() {
     return 'bg-gray-600'
   }
 
+  const getSeverityColor = (severity: string) => {
+    if (severity === 'critical') return 'bg-red-600'
+    if (severity === 'high') return 'bg-orange-500'
+    if (severity === 'medium') return 'bg-yellow-500'
+    return 'bg-blue-500'
+  }
+
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen bg-gray-900 text-gray-100 p-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">🤖 Agent Dashboard</h1>
+        <h1 className="text-3xl font-bold">🤖 ClawdBot Multi-Agent Dashboard</h1>
         <div className="text-sm text-gray-400">
           Letzte Aktualisierung: {lastUpdate.toLocaleTimeString('de-DE')}
           <span className="ml-2 inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
         </div>
       </div>
+
+      {/* ClawdBot Status Widget */}
+      {clawdBotStatus && (
+        <div className="bg-gray-800 rounded-lg p-6 mb-8 border-2 border-blue-500">
+          <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+            🔐 ClawdBot Auth Status
+            {clawdBotStatus.rateLimit.detected && (
+              <span className="ml-2 px-3 py-1 bg-red-600 text-white rounded-full text-sm animate-pulse">
+                RATE LIMIT!
+              </span>
+            )}
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            {/* OAuth Token */}
+            <div className="bg-gray-700 rounded p-4">
+              <h3 className="text-sm text-gray-400 mb-2">OAuth Token (Subscription)</h3>
+              <div className="text-2xl font-bold mb-1">
+                {clawdBotStatus.auth.oauthToken.hoursRemaining}h {clawdBotStatus.auth.oauthToken.minutesRemaining}m
+              </div>
+              <div className="text-xs text-gray-400">verbleibend</div>
+              <div className="mt-2 bg-gray-600 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all duration-500 ${
+                    clawdBotStatus.auth.oauthToken.hoursRemaining < 4 ? 'bg-red-500' : 'bg-green-500'
+                  }`}
+                  style={{
+                    width: `${Math.min(100, (clawdBotStatus.auth.oauthToken.hoursRemaining / 24) * 100)}%`
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Active Profile */}
+            <div className="bg-gray-700 rounded p-4">
+              <h3 className="text-sm text-gray-400 mb-2">Aktives Profil</h3>
+              <div className="text-lg font-mono">
+                {clawdBotStatus.auth.activeProfile === 'anthropic:claude-cli' ? (
+                  <span className="text-green-400">✅ OAuth (kostenlos)</span>
+                ) : (
+                  <span className="text-yellow-400">💳 API-Key (paid)</span>
+                )}
+              </div>
+              <div className="text-xs text-gray-400 mt-1">
+                {clawdBotStatus.auth.activeProfile}
+              </div>
+            </div>
+
+            {/* Rate Limit Status */}
+            <div className="bg-gray-700 rounded p-4">
+              <h3 className="text-sm text-gray-400 mb-2">Rate Limit</h3>
+              <div className="text-lg font-semibold">
+                {clawdBotStatus.rateLimit.detected ? (
+                  <span className="text-red-400">🚨 {clawdBotStatus.rateLimit.occurrences} Fehler</span>
+                ) : (
+                  <span className="text-green-400">✅ OK</span>
+                )}
+              </div>
+              {clawdBotStatus.rateLimit.lastDetected && (
+                <div className="text-xs text-gray-400 mt-1">
+                  Zuletzt: {new Date(clawdBotStatus.rateLimit.lastDetected).toLocaleTimeString()}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Recommendations */}
+          {clawdBotStatus.recommendations && clawdBotStatus.recommendations.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-gray-300 mb-2">Empfehlungen:</h3>
+              {clawdBotStatus.recommendations.map((rec, i) => (
+                <div
+                  key={i}
+                  className={`${getSeverityColor(rec.severity)} bg-opacity-20 border-l-4 ${getSeverityColor(rec.severity)} p-3 rounded`}
+                >
+                  <div className="font-semibold">{rec.message}</div>
+                  <div className="text-sm text-gray-300 mt-1 font-mono">{rec.action}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats Overview */}
       <div className="grid grid-cols-3 gap-4 mb-8">
@@ -122,7 +259,7 @@ function App() {
                 <span className="text-yellow-400">🔄 {stats.open} open</span>
               </div>
               <div className="mt-2 bg-gray-700 rounded-full h-2">
-                <div 
+                <div
                   className="bg-green-500 h-2 rounded-full transition-all duration-500"
                   style={{ width: `${stats.total ? (stats.closed / stats.total) * 100 : 0}%` }}
                 />
@@ -156,7 +293,7 @@ function App() {
               {project.name}
               {project.loading && <span className="animate-spin">⏳</span>}
             </h2>
-            
+
             {/* Open Issues */}
             <div className="mb-4">
               <h3 className="text-sm text-gray-400 mb-2">🔄 Open ({project.issues.filter(i => i.state === 'open').length})</h3>
@@ -165,7 +302,7 @@ function App() {
                   .filter(i => i.state === 'open')
                   .slice(0, 15)
                   .map(issue => (
-                    <div 
+                    <div
                       key={issue.number}
                       className={`p-2 rounded text-sm ${getPriorityColor(issue.labels)} bg-opacity-20 border-l-4 ${getPriorityColor(issue.labels)}`}
                     >
@@ -196,7 +333,7 @@ function App() {
 
       {/* Footer */}
       <div className="mt-8 text-center text-gray-500 text-sm">
-        Auto-refresh alle {REFRESH_INTERVAL / 1000}s • Nur für dich sichtbar
+        Auto-refresh alle {REFRESH_INTERVAL / 1000}s • ClawdBot Rate-Limit-Monitoring aktiv
       </div>
     </div>
   )
