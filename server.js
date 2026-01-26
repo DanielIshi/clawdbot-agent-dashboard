@@ -1,5 +1,6 @@
 const http = require('http');
 const { execSync } = require('child_process');
+const { getClawdBotStatus } = require('./clawdbot-monitor');
 
 const PROJECTS = [
   { name: 'Thai-Blitz', repo: 'DanielIshi/thai-blitz-ai-language-coach', emoji: '🇹🇭' },
@@ -45,6 +46,10 @@ const server = http.createServer((req, res) => {
       prs: getPRs(p.repo)
     }));
     res.end(JSON.stringify(data));
+  } else if (req.url === '/api/clawdbot-status') {
+    // NEU: ClawdBot Auth & Rate-Limit Monitoring
+    const status = getClawdBotStatus();
+    res.end(JSON.stringify(status));
   } else if (req.url === '/health') {
     res.end(JSON.stringify({ status: 'ok', time: new Date().toISOString() }));
   } else {
@@ -56,4 +61,8 @@ const server = http.createServer((req, res) => {
 const PORT = 3456;
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`Dashboard API running on http://127.0.0.1:${PORT}`);
+  console.log('Endpoints:');
+  console.log('  GET /api/projects         - GitHub Issues & PRs');
+  console.log('  GET /api/clawdbot-status  - Auth & Rate-Limit Monitoring');
+  console.log('  GET /health              - Health check');
 });
