@@ -12,6 +12,7 @@ import { AgentGrid } from './components/agents'
 import { ActivityFeed } from './components/activity'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { AgentMonitor } from './components/monitor'
+import { MetricsDashboard } from './components/MetricsDashboard'
 
 // Stable reference to avoid re-renders
 const WS_TOPICS: string[] = ['all']
@@ -70,6 +71,16 @@ function App() {
               >
                 Agenten Monitor
               </button>
+              <button
+                onClick={() => setCurrentView('metrics')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  currentView === 'metrics' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                Metriken
+              </button>
             </nav>
             
             <ConnectionStatus />
@@ -126,6 +137,8 @@ function App() {
 
         {currentView === 'agent-monitor' ? (
           <div>Agent Monitor disabled for debug</div>
+        ) : currentView === 'metrics' ? (
+          <MetricsDashboard />
         ) : (
           <div className="p-6 space-y-6">
             {/* DEBUG: Components disabled to isolate issue */}
