@@ -13,24 +13,27 @@ import { ActivityFeed } from './components/activity'
 import { ConnectionStatus } from './components/ConnectionStatus'
 import { AgentMonitor } from './components/monitor'
 
+// Stable reference to avoid re-renders
+const WS_TOPICS: string[] = ['all']
+const WS_OPTIONS = {
+  clientName: 'dashboard',
+  topics: WS_TOPICS
+}
+
 function App() {
   const [currentView, setCurrentView] = React.useState('dashboard')
   
   // Initialize WebSocket connection (URL auto-detected based on environment)
-  const { status, requestSnapshot } = useWebSocket({
-    clientName: 'dashboard',
-    topics: ['all']
-  })
+  // DEBUG: Temporarily disabled to isolate the issue
+  // const { status, requestSnapshot } = useWebSocket(WS_OPTIONS)
+  const status = 'disconnected' as const
+  const requestSnapshot = () => {}
 
-  // Get counts for header stats
-  const agentCount = useAgentStore((s) => s.agents.size)
-  const issueCount = useIssueStore((s) => s.issues.size)
-  const blockedAgents = useAgentStore((s) =>
-    Array.from(s.agents.values()).filter(a => a.status === 'blocked').length
-  )
-  const blockedIssues = useIssueStore((s) =>
-    Array.from(s.issues.values()).filter(i => i.isBlocked).length
-  )
+  // Get counts for header stats - DEBUG: hardcoded to isolate issue
+  const agentCount = 0 // useAgentStore((s) => s.agents.size)
+  const issueCount = 0 // useIssueStore((s) => s.issues.size)
+  const blockedAgents = 0 // useAgentStore((s) => ...)
+  const blockedIssues = 0 // useIssueStore((s) => ...)
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -122,56 +125,15 @@ function App() {
         )}
 
         {currentView === 'agent-monitor' ? (
-          <AgentMonitor />
+          <div>Agent Monitor disabled for debug</div>
         ) : (
           <div className="p-6 space-y-6">
-            {/* Agent Grid */}
-            <AgentGrid />
+            {/* DEBUG: Components disabled to isolate issue */}
+            <div>Agent Grid disabled</div>
+            <div>Kanban Board disabled</div>
 
-            {/* Kanban Board */}
-            <KanbanBoard />
-
-            {/* Activity Feed */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                {/* Additional stats or content can go here */}
-                <div className="bg-gray-900 rounded-lg p-4">
-                  <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    Quick Start
-                  </h2>
-                  <div className="space-y-3 text-sm text-gray-300">
-                    <div className="bg-gray-800 rounded p-3">
-                      <h3 className="font-medium text-white mb-2">1. Start the API Server</h3>
-                      <code className="bg-gray-900 px-2 py-1 rounded text-green-400">
-                        cd api && npm start
-                      </code>
-                    </div>
-                    <div className="bg-gray-800 rounded p-3">
-                      <h3 className="font-medium text-white mb-2">2. Create an Agent</h3>
-                      <code className="bg-gray-900 px-2 py-1 rounded text-blue-400 text-xs block whitespace-pre">
-{`curl -X POST http://localhost:3456/api/agents \\
-  -H "Content-Type: application/json" \\
-  -d '{"id":"agent-1","name":"Agent Alpha"}'`}
-                      </code>
-                    </div>
-                    <div className="bg-gray-800 rounded p-3">
-                      <h3 className="font-medium text-white mb-2">3. Create an Issue</h3>
-                      <code className="bg-gray-900 px-2 py-1 rounded text-purple-400 text-xs block whitespace-pre">
-{`curl -X POST http://localhost:3456/api/issues \\
-  -H "Content-Type: application/json" \\
-  -d '{"id":"issue-1","number":1,"title":"Test Issue","projectId":"test"}'`}
-                      </code>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <ActivityFeed maxItems={15} />
-              </div>
-            </div>
+            {/* DEBUG: Testing ActivityFeed */}
+            <ActivityFeed maxItems={15} />
           </div>
         )}
       </main>

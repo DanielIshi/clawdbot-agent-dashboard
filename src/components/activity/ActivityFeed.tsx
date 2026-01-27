@@ -38,8 +38,10 @@ interface ActivityFeedProps {
 }
 
 export function ActivityFeed({ maxItems = 20 }: ActivityFeedProps) {
-  const activities = useActivityStore((s) => s.activities.slice(0, maxItems))
+  // Get all activities and slice in render to avoid unstable selector
+  const allActivities = useActivityStore((s) => s.activities)
   const clearActivities = useActivityStore((s) => s.clearActivities)
+  const activities = allActivities.slice(0, maxItems)
 
   return (
     <div className="bg-gray-900 rounded-lg p-4">

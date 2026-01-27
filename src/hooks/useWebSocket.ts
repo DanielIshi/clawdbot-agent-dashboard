@@ -40,7 +40,8 @@ const DEFAULT_OPTIONS: Required<UseWebSocketOptions> = {
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
-  const opts = { ...DEFAULT_OPTIONS, ...options }
+  // Memoize options to prevent infinite re-renders
+  const opts = useRef({ ...DEFAULT_OPTIONS, ...options }).current
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
   const isConnectingRef = useRef(false)
@@ -164,13 +165,16 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       isConnectingRef.current = false
       wsRef.current = null
 
-      const wasConnected = status === 'connected'
+      // Get current state directly from store (avoid stale closure)
+      const currentState = useConnectionStore.getState()
+      const wasConnected = currentState.status === 'connected'
+      const currentReconnectAttempts = currentState.reconnectAttempts
 
       if (event.code !== 1000) {
         // Abnormal close - attempt reconnect
         setDisconnected(event.reason || 'Connection lost')
 
-        if (reconnectAttempts < opts.maxReconnectAttempts) {
+        if (currentReconnectAttempts < opts.maxReconnectAttempts) {
           setReconnecting()
           reconnectTimeoutRef.current = window.setTimeout(() => {
             connect()
@@ -198,20 +202,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       isConnectingRef.current = false
     }
   }, [
-    opts.url,
-    opts.clientName,
-    opts.topics,
-    opts.reconnectInterval,
-    opts.maxReconnectAttempts,
     send,
     requestSnapshot,
     setConnected,
     setDisconnected,
     setReconnecting,
     setStatus,
-    status,
-    reconnectAttempts,
     addActivity
+    // opts is a ref, status/reconnectAttempts read from store directly
   ])
 
   // Disconnect function
