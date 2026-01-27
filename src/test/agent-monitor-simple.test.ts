@@ -33,7 +33,9 @@ function getStatusIndicator(agent: Agent): string {
 function truncateThinking(thinking: string | null, maxLength: number = 50): string {
   if (!thinking) return '—'
   if (thinking.length <= maxLength) return `💭 ${thinking}`
-  return `💭 ${thinking.substring(0, maxLength)}...`
+  // Berücksichtige "💭 " (3 chars) und "..." (3 chars) für maxLength
+  const availableSpace = maxLength - 3 - 3
+  return `💭 ${thinking.substring(0, availableSpace)}...`
 }
 
 function filterAgentsByProject(agents: Agent[], project: string): Agent[] {
@@ -189,7 +191,7 @@ describe('Issue #32: Agent Monitor Logic Tests', () => {
 
     it('filtert nach thai-blitz Projekt', () => {
       const filtered = filterAgentsByProject(mockAgents, 'thai-blitz')
-      expect(filtered).toHaveLength(2)
+      expect(filtered).toHaveLength(3) // thai-dev, qa-rev, test-thai
       expect(filtered.every(agent => agent.project === 'thai-blitz')).toBe(true)
     })
 
@@ -262,13 +264,18 @@ describe('Issue #32: Agent Monitor Logic Tests', () => {
         thinking: truncateThinking(agent.lastThinking)
       }))
 
-      expect(agentStatuses).toHaveLength(2)
+      expect(agentStatuses).toHaveLength(3) // thai-dev, qa-rev, test-thai
       expect(agentStatuses[0]).toEqual({
         name: 'thai-dev',
         status: '🟢', // Active
         thinking: '💭 Jetzt Tests laufen lassen...'
       })
       expect(agentStatuses[1]).toEqual({
+        name: 'qa-rev',
+        status: '⏸️', // Idle > 5min
+        thinking: '—'
+      })
+      expect(agentStatuses[2]).toEqual({
         name: 'test-thai',
         status: '✅', // Done
         thinking: '💭 Alle Tests bestanden'
