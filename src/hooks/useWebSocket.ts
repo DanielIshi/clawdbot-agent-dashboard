@@ -15,8 +15,24 @@ interface UseWebSocketOptions {
   maxReconnectAttempts?: number
 }
 
+// Build WebSocket URL dynamically based on current location
+function getDefaultWebSocketUrl(): string {
+  if (typeof window === 'undefined') return 'ws://localhost:3456/ws/agentops'
+  
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = window.location.host
+  
+  // Local development
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    return 'ws://localhost:3456/ws/agentops'
+  }
+  
+  // Production: use /ws/ path (Caddy will proxy)
+  return `${protocol}//${host}/ws/agentops`
+}
+
 const DEFAULT_OPTIONS: Required<UseWebSocketOptions> = {
-  url: 'ws://localhost:3456/ws/agentops',
+  url: getDefaultWebSocketUrl(),
   clientName: 'dashboard',
   topics: ['all'],
   reconnectInterval: 3000,

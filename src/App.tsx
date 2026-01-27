@@ -16,9 +16,8 @@ import { AgentMonitor } from './components/monitor'
 function App() {
   const [currentView, setCurrentView] = React.useState('dashboard')
   
-  // Initialize WebSocket connection
+  // Initialize WebSocket connection (URL auto-detected based on environment)
   const { status, requestSnapshot } = useWebSocket({
-    url: 'ws://localhost:3456/ws/agentops',
     clientName: 'dashboard',
     topics: ['all']
   })
