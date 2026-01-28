@@ -12,7 +12,7 @@ env:
 jobs:
   test:
     name: Run Tests
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       
@@ -35,7 +35,7 @@ jobs:
   build-web:
     name: Build Web
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       
@@ -58,7 +58,7 @@ jobs:
   build-apk:
     name: Build APK
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       
@@ -98,7 +98,7 @@ jobs:
   deploy:
     name: Deploy to VPS
     needs: [build-web, build-apk]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -138,7 +138,7 @@ jobs:
   notify:
     name: Telegram Notification
     needs: deploy
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: always()
     steps:
       - uses: actions/checkout@v4
