@@ -1,0 +1,171 @@
+name: Deploy (Web + APK)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  JAVA_VERSION: '21'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - run: npm ci
+      
+      - name: Run frontend tests
+        run: npm test -- --run
+      
+      - name: Run API tests
+        run: |
+          cd api
+          npm ci
+          npm test -- --run
+
+  build-web:
+    name: Build Web
+    needs: test
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - run: npm ci
+      
+      - name: Build
+        run: npm run build
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist/
+          retention-days: 7
+
+  build-apk:
+    name: Build APK
+    needs: test
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+      
+      - run: npm ci
+      
+      - name: Build web assets
+        run: npm run build
+      
+      - name: Sync Capacitor
+        run: npx cap sync android
+      
+      - name: Build Debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+      
+      - name: Rename APK
+        run: |
+          mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/agent-dashboard.apk
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: android/app/build/outputs/apk/debug/agent-dashboard.apk
+          retention-days: 30
+
+  deploy:
+    name: Deploy to VPS
+    needs: [build-web, build-apk]
+    runs-on: self-hosted
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist/
+      
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: apk/
+      
+      - name: Copy APK to dist
+        run: cp apk/agent-dashboard.apk dist/
+      
+      - name: Deploy to VPS (local)
+        run: |
+          sudo rsync -av --delete dist/ /var/www/agent-dashboard/
+          echo "Web deployed at $(date)"
+      
+      - name: Update and Restart API Service
+        run: |
+          cd /root/clawd/agent-dashboard/api
+          git fetch origin main
+          git reset --hard origin/main
+          npm ci --production
+          sudo systemctl restart agent-dashboard-api || echo "API service not found, skipping"
+          echo "API updated at $(date)"
+
+  notify:
+    name: Telegram Notification
+    needs: deploy
+    runs-on: self-hosted
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Get commit info
+        id: commit
+        run: |
+          echo "message=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+          echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
+          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      
+      - name: Send success notification
+        if: needs.deploy.result == 'success'
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="HTML" \
+            -d text="🚀 <b>Agent Dashboard Deployed!</b>
+
+📝 <code>${{ steps.commit.outputs.message }}</code>
+👤 ${{ steps.commit.outputs.author }}
+🔗 <code>${{ steps.commit.outputs.sha }}</code>
+
+🌐 <a href=\"https://apps.srv947487.hstgr.cloud/agent-dashboard/\">Web App</a>
+📱 <a href=\"https://apps.srv947487.hstgr.cloud/agent-dashboard/agent-dashboard.apk\">Download APK</a>"
+      
+      - name: Send failure notification
+        if: needs.deploy.result == 'failure'
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="HTML" \
+            -d text="❌ <b>Agent Dashboard Deploy Failed!</b>
+
+📝 <code>${{ steps.commit.outputs.message }}</code>
+🔗 <a href=\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\">View Logs</a>"
