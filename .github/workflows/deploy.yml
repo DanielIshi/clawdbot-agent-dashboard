@@ -121,18 +121,21 @@ jobs:
             echo "APK not available, skipping"
           fi
       
-      - name: Deploy to VPS (local)
+      - name: Setup SSH
         run: |
-          sudo rsync -av --delete dist/ /var/www/agent-dashboard/
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+      
+      - name: Deploy to VPS
+        run: |
+          scp -r dist/* ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/agent-dashboard/
           echo "Web deployed at $(date)"
       
       - name: Update and Restart API Service
         run: |
-          cd /root/clawd/agent-dashboard/api
-          git fetch origin main
-          git reset --hard origin/main
-          npm ci --production
-          sudo systemctl restart agent-dashboard-api || echo "API service not found, skipping"
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'cd /root/clawd/agent-dashboard/api && git fetch origin main && git reset --hard origin/main && npm ci --production && systemctl restart agent-dashboard-api 2>/dev/null || echo "API service not found"'
           echo "API updated at $(date)"
 
   notify:
