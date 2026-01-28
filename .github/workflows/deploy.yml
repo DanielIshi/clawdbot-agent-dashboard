@@ -146,26 +146,26 @@ jobs:
       
       - name: Send success notification
         if: needs.deploy.result == 'success'
+        env:
+          COMMIT_MSG: ${{ steps.commit.outputs.message }}
+          COMMIT_AUTHOR: ${{ steps.commit.outputs.author }}
+          COMMIT_SHA: ${{ steps.commit.outputs.sha }}
         run: |
+          TEXT="🚀 <b>Agent Dashboard Deployed!</b>%0A%0A📝 <code>${COMMIT_MSG}</code>%0A👤 ${COMMIT_AUTHOR}%0A🔗 <code>${COMMIT_SHA}</code>%0A%0A🌐 <a href='https://apps.srv947487.hstgr.cloud/agent-dashboard/'>Web App</a>%0A📱 <a href='https://apps.srv947487.hstgr.cloud/agent-dashboard/agent-dashboard.apk'>Download APK</a>"
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="HTML" \
-            -d text="🚀 <b>Agent Dashboard Deployed!</b>
-
-📝 <code>${{ steps.commit.outputs.message }}</code>
-👤 ${{ steps.commit.outputs.author }}
-🔗 <code>${{ steps.commit.outputs.sha }}</code>
-
-🌐 <a href=\"https://apps.srv947487.hstgr.cloud/agent-dashboard/\">Web App</a>
-📱 <a href=\"https://apps.srv947487.hstgr.cloud/agent-dashboard/agent-dashboard.apk\">Download APK</a>"
+            -d text="${TEXT}"
       
       - name: Send failure notification
         if: needs.deploy.result == 'failure'
+        env:
+          COMMIT_MSG: ${{ steps.commit.outputs.message }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
         run: |
+          TEXT="❌ <b>Agent Dashboard Deploy Failed!</b>%0A%0A📝 <code>${COMMIT_MSG}</code>%0A🔗 <a href='https://github.com/${REPO}/actions/runs/${RUN_ID}'>View Logs</a>"
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="HTML" \
-            -d text="❌ <b>Agent Dashboard Deploy Failed!</b>
-
-📝 <code>${{ steps.commit.outputs.message }}</code>
-🔗 <a href=\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\">View Logs</a>"
+            -d text="${TEXT}"
