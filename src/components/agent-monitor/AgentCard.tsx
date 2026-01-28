@@ -38,7 +38,8 @@ const getStatusInfo = (agent: Agent): { emoji: string; className: string } => {
   return { emoji: '⏸️', className: 'status-paused' }
 }
 
-const truncateThinking = (text: string | null, maxLength: number = 50): string => {
+// Max 47 chars + "..." = 50 chars text, plus "💭 " (3 chars) = 53 total in thinking-preview
+const truncateThinking = (text: string | null, maxLength: number = 47): string => {
   if (!text) return '—'
   if (text.length <= maxLength) return text
   return text.substring(0, maxLength) + '...'

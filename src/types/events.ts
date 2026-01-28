@@ -29,6 +29,9 @@ export type EventType =
   | 'system.snapshot'
   | 'system.error'
   | 'system.alert'
+  | 'quota.update'
+  | 'quota.exhausted'
+  | 'quota.recovered'
 
 // Client message types
 export type ClientMessageType =

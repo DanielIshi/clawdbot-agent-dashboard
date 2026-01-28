@@ -4,10 +4,12 @@
 import type { EventEnvelope, ServerMessage } from '../types/events'
 import type { Agent } from '../types/agent'
 import type { Issue } from '../types/issue'
+import type { QuotaUpdatePayload, QuotaExhaustedPayload } from '../types/quota'
 import { useAgentStore } from '../stores/agentStore'
 import { useIssueStore } from '../stores/issueStore'
 import { useActivityStore } from '../stores/activityStore'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useQuotaStore } from '../stores/quotaStore'
 
 // Gap detection callback (Issue #25)
 let gapDetectionCallback: ((currentSeq: number, expectedSeq: number) => void) | null = null
@@ -126,6 +128,18 @@ export function processEvent(event: EventEnvelope): void {
 
     case 'system.error':
       handleSystemError(payload)
+      break
+
+    case 'quota.update':
+      handleQuotaUpdate(payload)
+      break
+
+    case 'quota.exhausted':
+      handleQuotaExhausted(payload)
+      break
+
+    case 'quota.recovered':
+      handleQuotaRecovered(payload)
       break
 
     default:
@@ -253,6 +267,69 @@ function handleSystemError(payload: Record<string, unknown>): void {
   useActivityStore.getState().addActivity({
     message: `[ERROR] ${message}`,
     type: 'error'
+  })
+}
+
+// Quota update handler (Issue #45)
+function handleQuotaUpdate(payload: Record<string, unknown>): void {
+  const quotaStore = useQuotaStore.getState()
+  
+  const quotaPayload: QuotaUpdatePayload = {
+    provider: (payload.provider as 'claude' | 'minimax') || 'claude',
+    requestsRemaining: payload.requestsRemaining as number | undefined,
+    tokensRemaining: payload.tokensRemaining as number | undefined,
+    requestsLimit: payload.requestsLimit as number | undefined,
+    tokensLimit: payload.tokensLimit as number | undefined,
+    requestsResetAt: payload.requestsResetAt as string | undefined,
+    tokensResetAt: payload.tokensResetAt as string | undefined
+  }
+  
+  quotaStore.updateQuota(quotaPayload)
+  
+  // Check if auto-switch is needed
+  const switched = quotaStore.checkAndAutoSwitch()
+  if (switched) {
+    useActivityStore.getState().addActivity({
+      message: '⚠️ Quota niedrig - Auto-Switch zu Minimax',
+      type: 'warning'
+    })
+  }
+}
+
+// Quota exhausted handler (Issue #45)
+function handleQuotaExhausted(payload: Record<string, unknown>): void {
+  const quotaStore = useQuotaStore.getState()
+  const activityStore = useActivityStore.getState()
+  
+  const exhaustedPayload: QuotaExhaustedPayload = {
+    provider: (payload.provider as 'claude' | 'minimax') || 'claude',
+    timestamp: (payload.timestamp as string) || new Date().toISOString(),
+    cooldownMinutes: (payload.cooldownMinutes as number) || 30,
+    reason: (payload.reason as 'rate_limit_429' | 'quota_threshold') || 'rate_limit_429'
+  }
+  
+  quotaStore.setQuotaExhausted(exhaustedPayload)
+  
+  // Force switch to minimax
+  if (quotaStore.currentProvider === 'claude') {
+    quotaStore.switchProvider('minimax')
+  }
+  
+  activityStore.addActivity({
+    message: `🚫 Claude Rate Limit erreicht (429) - ${exhaustedPayload.cooldownMinutes}min Cooldown`,
+    type: 'error'
+  })
+}
+
+// Quota recovered handler (Issue #45)
+function handleQuotaRecovered(payload: Record<string, unknown>): void {
+  const provider = payload.provider as 'claude' | 'minimax'
+  
+  useQuotaStore.getState().setQuotaRecovered(provider)
+  
+  useActivityStore.getState().addActivity({
+    message: '✅ Claude wieder verfügbar',
+    type: 'success'
   })
 }
 
