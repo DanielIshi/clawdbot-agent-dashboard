@@ -38,15 +38,23 @@ export const AgentMonitor: React.FC<AgentMonitorProps> = ({
     }).length
   }, [agents])
 
-  // Polling effect
+  // Polling effect - calls onAgentUpdate immediately and then every 5s
   useEffect(() => {
     if (!onAgentUpdate) return
+
+    // Initial call after a short delay to let component mount
+    const initialTimeout = setTimeout(() => {
+      onAgentUpdate()
+    }, 100)
 
     const interval = setInterval(() => {
       onAgentUpdate()
     }, 5000)
 
-    return () => clearInterval(interval)
+    return () => {
+      clearTimeout(initialTimeout)
+      clearInterval(interval)
+    }
   }, [onAgentUpdate])
 
   const handleCardClick = useCallback((agent: Agent) => {
@@ -59,6 +67,20 @@ export const AgentMonitor: React.FC<AgentMonitorProps> = ({
 
   // Virtualization check - use virtual list for 40+ agents
   const useVirtualization = agents.length > 40
+
+  // Determine grid columns based on viewport width
+  const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  
+  const getGridTemplateColumns = () => {
+    if (isMobile) {
+      return 'repeat(2, 1fr)' // 2 columns on mobile
+    }
+    if (isDesktop) {
+      return 'repeat(10, minmax(100px, 1fr))' // 10 columns on desktop
+    }
+    return 'repeat(auto-fill, minmax(140px, 1fr))' // auto for tablet
+  }
 
   if (selectedAgent) {
     return (
@@ -115,7 +137,7 @@ export const AgentMonitor: React.FC<AgentMonitorProps> = ({
         data-virtualized={useVirtualization ? 'true' : 'false'}
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+          gridTemplateColumns: getGridTemplateColumns(),
           gap: '12px',
           overflow: 'auto',
           maxHeight: 'calc(100vh - 150px)',
