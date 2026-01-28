@@ -67,14 +67,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
       
-      - name: Setup Java environment
-        run: |
-          export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-          export PATH=$JAVA_HOME/bin:/usr/bin:$PATH
-          java --version
-          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
-          echo "$JAVA_HOME/bin" >> $GITHUB_PATH
-          echo "/usr/bin" >> $GITHUB_PATH
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
       
       - run: npm ci
       
@@ -100,7 +96,8 @@ jobs:
 
   deploy:
     name: Deploy to VPS
-    needs: [build-web, build-apk]
+    needs: [build-web]
+    if: always() && needs.build-web.result == 'success'
     runs-on: self-hosted
     steps:
       - uses: actions/download-artifact@v4
@@ -109,12 +106,20 @@ jobs:
           path: dist/
       
       - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: apk
           path: apk/
       
-      - name: Copy APK to dist
-        run: cp apk/agent-dashboard.apk dist/
+      - name: Copy APK to dist (if available)
+        continue-on-error: true
+        run: |
+          if [ -f apk/agent-dashboard.apk ]; then
+            cp apk/agent-dashboard.apk dist/
+            echo "APK included"
+          else
+            echo "APK not available, skipping"
+          fi
       
       - name: Deploy to VPS (local)
         run: |
