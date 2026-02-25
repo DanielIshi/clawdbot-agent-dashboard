@@ -113,3 +113,22 @@ export interface VoxelBlock {
   z: number  // Höhe (0 = Boden)
   color: string
 }
+
+/**
+ * Building-Status (Issue #56)
+ */
+export type BuildingStatus = 'active' | 'has_issues' | 'has_pr'
+
+/**
+ * Building (Projekt-Gebäude, Issue #56, AC1)
+ */
+export interface Building {
+  id: string
+  projectName: string
+  position: GridCoordinates
+  color: string
+  status: BuildingStatus
+  height: number  // 3-6 Voxel
+  issueCount: number
+  prCount: number
+}
