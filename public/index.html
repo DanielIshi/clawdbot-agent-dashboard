@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Settlers Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Jost:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <div class="title-block">
+          <span class="crest">Settlers</span>
+          <h1>Agent Dashboard</h1>
+        </div>
+        <div id="status-bar">
+          <span id="connection-status">verbinde…</span>
+          <span id="agent-count">0 Agents</span>
+        </div>
+      </header>
+      <main>
+        <div id="canvas-container">
+          <canvas id="scene-canvas"></canvas>
+          <canvas id="game-canvas"></canvas>
+          <div id="speech-layer"></div>
+          <div id="scene-hud">
+            <span>Scroll = Zoom</span>
+            <span>Drag = Orbit</span>
+            <span>Shift = Slow</span>
+          </div>
+        </div>
+        <aside id="sidebar">
+          <h2>Sessions</h2>
+          <div id="session-list"></div>
+          <div id="session-detail">
+            <div class="detail-header">Log</div>
+            <div id="session-log">Noch keine Session gewaehlt.</div>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="three-scene.js"></script>
+    <script src="game.js" defer></script>
+    <script src="agents.js" defer></script>
+  </body>
+</html>
