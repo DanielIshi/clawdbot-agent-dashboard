@@ -516,6 +516,29 @@ app.get('/api/system/status', (req, res) => {
   })
 })
 
+// ==================== Session Routes (Issue #58) ====================
+
+// Get all sessions (Mock data for now - can be extended with real session tracking)
+app.get('/api/sessions', (req, res) => {
+  // Mock session data
+  const sessions = [
+    {
+      id: 'claude-session-1',
+      status: 'active',
+      lastActivity: new Date().toISOString(),
+      output: 'Building settlers dashboard... implementing session sidebar component...'
+    },
+    {
+      id: 'agent-session-2',
+      status: 'done',
+      lastActivity: new Date(Date.now() - 60000).toISOString(),
+      output: 'Build completed successfully. All tests passed. PR merged.'
+    }
+  ]
+
+  res.json({ sessions })
+})
+
 // ==================== Event Routes ====================
 
 // Get events (for replay)
