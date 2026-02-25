@@ -16,6 +16,7 @@ import { QuotaStatus } from './components/QuotaStatus'
 import CostDashboard from './pages/CostDashboard'
 import { IsometricCanvas } from './components/settlers/IsometricCanvas'
 import { SessionSidebar } from './components/settlers/SessionSidebar'
+import { LiveAgentStreamView } from './components/settlers/LiveAgentStreamView'
 
 // Navigation items
 const navItems = [
@@ -43,6 +44,15 @@ const navItems = [
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+    ),
+  },
+  {
+    key: 'live-stream',
+    label: 'Live Stream',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14m-6 0h.01M3 6a2 2 0 012-2h9a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6z" />
       </svg>
     ),
   },
@@ -216,6 +226,8 @@ function AppContent() {
           <CostDashboard />
         ) : currentView === 'agent-monitor' ? (
           <div className="p-4">Agent Monitor disabled for debug</div>
+        ) : currentView === 'live-stream' ? (
+          <LiveAgentStreamView />
         ) : currentView === 'settlers' ? (
           <div className="relative">
             {/* Main Canvas Area */}
