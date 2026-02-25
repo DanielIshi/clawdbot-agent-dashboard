@@ -31,13 +31,10 @@ export function drawVoxel(
 ): void {
   const halfSize = size / 2
 
-  // Farben für die 3 Flächen (verschiedene Helligkeiten für 3D-Effekt)
-  const topColor = lightenColor(color, 0.2)      // Hellste Fläche (oben)
-  const leftColor = color                         // Mittlere Helligkeit (links)
-  const rightColor = darkenColor(color, 0.2)     // Dunkelste Fläche (rechts)
+  // Verwende die exakte übergebene Farbe (AC2: Farbe wird als Voxel-Block-Color verwendet)
+  ctx.fillStyle = color
 
   // Oberseite (Top) - Raute
-  ctx.fillStyle = topColor
   ctx.beginPath()
   ctx.moveTo(x, y)                        // Oben
   ctx.lineTo(x + halfSize, y + halfSize / 2)  // Rechts
@@ -46,8 +43,7 @@ export function drawVoxel(
   ctx.closePath()
   ctx.fill()
 
-  // Linke Seite
-  ctx.fillStyle = leftColor
+  // Linke Seite (selbe Farbe)
   ctx.beginPath()
   ctx.moveTo(x, y + halfSize)             // Oben
   ctx.lineTo(x - halfSize, y + halfSize / 2)  // Links oben
@@ -56,8 +52,7 @@ export function drawVoxel(
   ctx.closePath()
   ctx.fill()
 
-  // Rechte Seite
-  ctx.fillStyle = rightColor
+  // Rechte Seite (selbe Farbe)
   ctx.beginPath()
   ctx.moveTo(x, y + halfSize)             // Oben
   ctx.lineTo(x + halfSize, y + halfSize / 2)  // Rechts oben
