@@ -11,19 +11,26 @@
 import React from 'react'
 import type { SpeechBubble } from './types'
 import { truncateToLines } from './textTruncate'
+import { useSpeechBubbleAnimation } from './useSpeechBubbleAnimation'
 
 interface SpeechBubbleComponentProps {
   bubble: SpeechBubble
 }
 
 export const SpeechBubbleComponent: React.FC<SpeechBubbleComponentProps> = ({ bubble }) => {
-  // Don't render if not visible
-  if (!bubble.visible) {
-    return null
-  }
-
   // Truncate text to max 3 lines (AC5)
   const displayText = truncateToLines(bubble.text, 3, 40)
+
+  // Fade animation on text change (AC3)
+  const { opacity: animatedOpacity, isVisible } = useSpeechBubbleAnimation(
+    bubble.text,
+    bubble.visible
+  )
+
+  // Don't render if not visible
+  if (!isVisible) {
+    return null
+  }
 
   return (
     <div
@@ -33,7 +40,7 @@ export const SpeechBubbleComponent: React.FC<SpeechBubbleComponentProps> = ({ bu
         position: 'absolute',
         left: `${bubble.position.isoX}px`,
         top: `${bubble.position.isoY}px`,
-        opacity: bubble.opacity,
+        opacity: animatedOpacity * bubble.opacity, // Combine animated and base opacity
         backgroundColor: 'white',
         color: 'black',
         padding: '8px 12px',
