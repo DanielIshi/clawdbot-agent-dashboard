@@ -74,6 +74,34 @@ app.get('/api/sessions/:name/log', (req, res) => {
   res.json({ chat, name });
 });
 
+// NEW: Tmux output capture endpoint
+app.get('/api/sessions/:name/tmux-output', (req, res) => {
+  const name = req.params.name;
+
+  // Load session JSON to get tmux_session field
+  let sessionData = null;
+  SESSION_DIRS.forEach(dir => {
+    const p = path.join(dir, name + '.json');
+    if (fs.existsSync(p)) {
+      try {
+        sessionData = JSON.parse(fs.readFileSync(p, 'utf-8'));
+      } catch (e) {}
+    }
+  });
+
+  if (!sessionData || !sessionData.tmux_session) {
+    return res.json({ output: '', error: 'No tmux session registered', name });
+  }
+
+  // Execute tmux capture-pane
+  exec(`tmux capture-pane -t ${sessionData.tmux_session} -p -S -100`, (error, stdout) => {
+    if (error) {
+      return res.json({ output: '', error: error.message, name, session: sessionData.tmux_session });
+    }
+    res.json({ output: stdout, name, session: sessionData.tmux_session });
+  });
+});
+
 const distPath = __dirname;
 if (fs.existsSync(path.join(distPath, 'index.html'))) {
   app.use(express.static(distPath));
