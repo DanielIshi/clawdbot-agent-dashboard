@@ -1,4 +1,44 @@
 const DEFAULT_ORIGIN = { x: 0, y: 0 };
+const DEFAULT_BUBBLE_MAX = 120;
+const DEFAULT_TYPE_INTERVAL = 26;
+
+export function formatBubbleText(raw, maxChars = DEFAULT_BUBBLE_MAX) {
+  const cleaned = (raw || '').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+  if (cleaned.length > maxChars) return `${cleaned.slice(0, maxChars)}…`;
+  return cleaned;
+}
+
+export function createTypewriterState(fullText, nowMs, intervalMs = DEFAULT_TYPE_INTERVAL) {
+  const safeText = fullText || '';
+  return {
+    fullText: safeText,
+    typedLength: safeText ? 0 : 0,
+    lastTick: Number.isFinite(nowMs) ? nowMs : 0,
+    intervalMs,
+    done: safeText.length === 0
+  };
+}
+
+export function stepTypewriter(state, nowMs) {
+  if (!state || state.done || !state.fullText) return state;
+  const now = Number.isFinite(nowMs) ? nowMs : state.lastTick;
+  const elapsed = Math.max(0, now - state.lastTick);
+  const steps = Math.floor(elapsed / state.intervalMs);
+  if (steps <= 0) return state;
+  const nextLength = Math.min(state.fullText.length, state.typedLength + steps);
+  return {
+    ...state,
+    typedLength: nextLength,
+    lastTick: state.lastTick + steps * state.intervalMs,
+    done: nextLength >= state.fullText.length
+  };
+}
+
+export function getTypedText(state) {
+  if (!state || !state.fullText) return '';
+  return state.fullText.slice(0, state.typedLength);
+}
 
 export function cartesianToIsometric(x, y, tileSize, originX = DEFAULT_ORIGIN.x, originY = DEFAULT_ORIGIN.y) {
   const halfW = tileSize / 2;
@@ -247,6 +287,7 @@ async function initThreeScene() {
 
   const bubbleMap = new Map();
   const agentSprites = new Map();
+  const typingState = new Map();
 
   function createAgentSprite(type) {
     const style = AGENT_STYLES[type] || DEFAULT_STYLE;
@@ -295,13 +336,21 @@ async function initThreeScene() {
   }
 
   function updateBubbleContent(agent) {
-    const text = (agent.lastOutput || '').trim();
+    const text = formatBubbleText(agent.lastOutput);
     const bubble = ensureBubble(agent);
     const speaker = bubble.querySelector('.speaker');
     const textEl = bubble.querySelector('.text');
     speaker.textContent = agent.name || 'agent';
-    const short = text.length > 90 ? `${text.slice(0, 90)}…` : text;
-    textEl.textContent = short || '[RUN]';
+    const now = (globalThis.performance && performance.now())
+      ? performance.now()
+      : Date.now();
+    const currentState = typingState.get(agent.name);
+    if (!currentState || currentState.fullText !== text) {
+      typingState.set(agent.name, createTypewriterState(text, now));
+    }
+    const nextState = typingState.get(agent.name);
+    const typed = getTypedText(nextState);
+    textEl.textContent = typed || (agent.status === 'active' ? '[RUN]' : '');
     bubble.classList.toggle('active', Boolean(text || agent.status === 'active'));
   }
 
@@ -336,6 +385,7 @@ async function initThreeScene() {
       if (!activeNames.has(name)) {
         bubble.remove();
         bubbleMap.delete(name);
+        typingState.delete(name);
       }
     }
 
@@ -374,9 +424,27 @@ async function initThreeScene() {
     });
   }
 
+  function updateBubbleTyping(nowMs) {
+    typingState.forEach((state, name) => {
+      if (!state.fullText) return;
+      const next = stepTypewriter(state, nowMs);
+      if (next !== state) {
+        typingState.set(name, next);
+        const bubble = bubbleMap.get(name);
+        if (!bubble) return;
+        const textEl = bubble.querySelector('.text');
+        if (!textEl) return;
+        textEl.textContent = getTypedText(next);
+      }
+    });
+  }
+
   function animate() {
     if (controls.update) controls.update();
     if (renderer) renderer.render(scene, camera);
+    updateBubbleTyping((globalThis.performance && performance.now())
+      ? performance.now()
+      : Date.now());
     updateBubblePositions();
     requestAnimationFrame(animate);
   }
