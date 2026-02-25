@@ -4,3 +4,4 @@
 export * from './events'
 export * from './agent'
 export * from './issue'
+export * from './settlers'

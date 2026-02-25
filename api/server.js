@@ -14,6 +14,7 @@ import { IssueStateMachine, createIssue } from './state/issueStateMachine.js'
 import { validateAssignment, validateBlock } from './state/invariants.js'
 import { pubsub } from './websocket/topics.js'
 
+import costRoutes from './cost-routes.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // Configuration
@@ -23,6 +24,7 @@ const DB_PATH = process.env.DB_PATH || join(__dirname, 'data', 'events.db')
 // Initialize Express app
 const app = express()
 app.use(express.json())
+app.use('/api/cost', costRoutes)
 
 // CORS for local development
 app.use((req, res, next) => {
@@ -183,8 +185,22 @@ app.put('/api/agents/:id/status', (req, res) => {
     })
   }
 
-  // Block requires reason (invariant)
+  // Working requires assigned issue (invariant)
+  if (status === 'working' && !agent.currentIssueId) {
+    return res.status(400).json({
+      error: 'Cannot set status to "working" without assigned issue (Invariant)',
+      code: 'INVARIANT_VIOLATION'
+    })
+  }
+
+  // Block requires reason (invariant) - FIX 4: Check reason first
   if (status === 'blocked') {
+    if (!reason) {
+      return res.status(400).json({
+        error: 'Cannot set status to "blocked" without reason (Invariant)',
+        code: 'INVARIANT_VIOLATION'
+      })
+    }
     const blockValidation = validateBlock(agent, reason)
     if (!blockValidation.valid) {
       return res.status(400).json({ error: blockValidation.error })
@@ -268,6 +284,7 @@ app.put('/api/issues/:id/state', (req, res) => {
 
   const previousState = issue.state
   sm.transition(newState)
+  issue.updatedAt = new Date().toISOString() // FIX 1: Update timestamp
 
   emitEvent(EventTypes.ISSUE_STATE_CHANGED, issue.projectId, {
     previous_state: previousState,
@@ -281,6 +298,12 @@ app.put('/api/issues/:id/state', (req, res) => {
 // Assign issue to agent
 app.put('/api/issues/:id/assign', (req, res) => {
   const { agentId } = req.body
+
+  // FIX 5: Validate agentId is provided
+  if (!agentId) {
+    return res.status(400).json({ error: 'agentId required' })
+  }
+
   const issue = state.issues.get(req.params.id)
   const agent = state.agents.get(agentId)
 
@@ -303,6 +326,7 @@ app.put('/api/issues/:id/assign', (req, res) => {
 
   // Update agent's current issue
   agent.currentIssueId = issue.id
+  agent.status = 'working' // FIX 3: Auto-set status to working
   agent.lastActivity = new Date().toISOString()
 
   emitEvent(EventTypes.ISSUE_ASSIGNED, issue.projectId, {
@@ -399,19 +423,28 @@ app.put('/api/issues/:id/complete', (req, res) => {
 
   const sm = new IssueStateMachine(issue)
 
-  // Allow completion from review state (normal flow) or force complete
+  // FIX 2: Allow completion from review state (normal flow) or force complete
   const { force } = req.body
-  if (!force && !sm.canTransition('done')) {
-    return res.status(400).json({
-      error: `Cannot complete issue in state '${issue.state}'. Move to 'review' first or use force=true`,
-      validTransitions: sm.getValidTransitions()
-    })
-  }
 
   const previousState = issue.state
   const previousAgent = issue.assignedAgentId
 
-  // Transition to done
+  // If in review state, use state machine
+  if (issue.state === 'review') {
+    sm.transition('done')
+  } else if (force) {
+    // Force completion bypasses state machine
+    issue.state = 'done'
+  } else {
+    // Not in review and no force flag
+    return res.status(400).json({
+      error: `Cannot complete issue in state '${issue.state}'. Move to 'review' first or use force=true`,
+      validTransitions: sm.getValidTransitions(),
+      currentState: issue.state
+    })
+  }
+
+  // Ensure state is done (in case transition failed)
   issue.state = 'done'
   issue.completedAt = new Date().toISOString()
   issue.updatedAt = issue.completedAt

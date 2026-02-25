@@ -67,7 +67,7 @@ interface QuotaStatusProps {
 export function QuotaStatus({ compact = false }: QuotaStatusProps) {
   const quota = useQuotaStore()
   const isClaudeAvailable = useQuotaStore(selectIsClaudeAvailable)
-  const quotaPercent = useQuotaStore(selectQuotaPercent)
+  const quotaPercent = useQuotaStore(selectQuotaPercent, (a, b) => a.requests === b.requests && a.tokens === b.tokens)
   const [cooldownRemaining, setCooldownRemaining] = useState(0)
 
   // Update cooldown timer every minute

@@ -1,35 +1,12 @@
-import { test, expect } from '@playwright/test'
-
-test('debug page load', async ({ page }) => {
-  const errors: string[] = []
-  const logs: string[] = []
-  
-  page.on('pageerror', err => {
-    errors.push(`PAGE ERROR: ${err.message}`)
-  })
-  
-  page.on('console', msg => {
-    logs.push(`[${msg.type()}] ${msg.text()}`)
-  })
-  
-  await page.goto('/')
-  await page.waitForTimeout(5000)
-  
-  console.log('\n=== CONSOLE LOGS ===')
-  logs.forEach(log => console.log(log))
-  
-  console.log('\n=== PAGE ERRORS ===')
-  errors.forEach(err => console.log(err))
-  
-  // Get page content
-  const html = await page.content()
-  console.log('\n=== PAGE HTML (first 2000 chars) ===')
-  console.log(html.slice(0, 2000))
-  
-  // Check if root has content
-  const rootContent = await page.locator('#root').innerHTML()
-  console.log('\n=== #root innerHTML (first 500 chars) ===')
-  console.log(rootContent.slice(0, 500))
-  
-  expect(errors).toHaveLength(0)
-})
+import { test } from "@playwright/test";
+test("debug prod", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("console", msg => { if (msg.type() === "error") errors.push(msg.text()); });
+  page.on("pageerror", err => errors.push("PAGEERROR: " + err.toString()));
+  await page.goto("https://apps.srv947487.hstgr.cloud/agent-dashboard/");
+  await page.waitForTimeout(5000);
+  const rootHTML = await page.locator("#root").innerHTML();
+  console.log("ROOT HTML LENGTH:", rootHTML.length);
+  console.log("ERRORS:", JSON.stringify(errors));
+  if (rootHTML.length > 0) console.log("FIRST 300:", rootHTML.substring(0, 300));
+});

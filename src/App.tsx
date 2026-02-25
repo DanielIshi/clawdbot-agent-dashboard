@@ -13,6 +13,8 @@ import { ConnectionStatus } from './components/ConnectionStatus'
 import { AgentMonitor } from './components/monitor'
 import { MetricsDashboard } from './components/MetricsDashboard'
 import { QuotaStatus } from './components/QuotaStatus'
+import CostDashboard from './pages/CostDashboard'
+import { IsometricCanvas } from './components/settlers/IsometricCanvas'
 
 // Navigation items
 const navItems = [
@@ -35,6 +37,15 @@ const navItems = [
     ),
   },
   {
+    key: 'settlers',
+    label: 'Siedler',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+    ),
+  },
+  {
     key: 'metrics',
     label: 'Metriken',
     icon: (
@@ -43,12 +54,29 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    key: 'cost',
+    label: 'Kosten',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
 ]
+
+
+// Error Boundary to prevent component crashes from taking down the whole app
+class ErrorBoundary extends React.Component<{children: React.ReactNode, fallback?: React.ReactNode}, {hasError: boolean}> {
+  constructor(props: any) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() { return this.state.hasError ? (this.props.fallback || null) : this.props.children; }
+}
 
 function AppContent() {
   const [currentView, setCurrentView] = useState('dashboard')
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [showToast] = useToast()
+  const { showToast } = useToast()
 
   const status = 'disconnected' as const
   const agentCount = 0
@@ -110,7 +138,7 @@ function AppContent() {
             </nav>
             
             <ConnectionStatus />
-            <QuotaStatus compact />
+            <ErrorBoundary><QuotaStatus compact /></ErrorBoundary>
           </div>
 
           {/* Quick Stats */}
@@ -183,15 +211,32 @@ function AppContent() {
           </div>
         )}
 
-        {currentView === 'agent-monitor' ? (
+        {currentView === 'cost' ? (
+          <CostDashboard />
+        ) : currentView === 'agent-monitor' ? (
           <div className="p-4">Agent Monitor disabled for debug</div>
+        ) : currentView === 'settlers' ? (
+          <div className="p-4 lg:p-6">
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-white">Settlers Dashboard (Issue #53)</h2>
+                <span className="text-xs text-gray-500">Isometrische Canvas-Basis mit Grid-System</span>
+              </div>
+              <IsometricCanvas
+                debug={true}
+                onTileClick={(coords) => {
+                  console.log('Tile clicked:', coords)
+                }}
+              />
+            </div>
+          </div>
         ) : currentView === 'metrics' ? (
           <MetricsDashboard />
         ) : (
           <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
             {/* Quota Status Panel */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <QuotaStatus />
+              <ErrorBoundary><QuotaStatus /></ErrorBoundary>
               <div className="lg:col-span-2">
                 <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 h-full">
                   <h3 className="text-sm font-medium text-gray-300 mb-2">System Status</h3>
