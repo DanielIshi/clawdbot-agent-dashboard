@@ -144,3 +144,28 @@ export interface SpeechBubble {
   visible: boolean                   // Sichtbarkeit
   opacity: number                    // Transparenz (0.0 - 1.0)
 }
+
+/**
+ * Session (Issue #58, AC2)
+ * Repräsentiert eine Agent-Session
+ */
+export interface Session {
+  name: string
+  type: AgentType
+  status: 'active' | 'done' | 'failed'
+  project: string
+  startedAt: string      // ISO8601
+  lastActivity: string   // ISO8601
+  lastOutput: string
+  tool?: string
+}
+
+/**
+ * Sidebar State (Issue #58)
+ */
+export interface SidebarState {
+  sessions: Session[]
+  selectedSession: Session | null
+  isOpen: boolean
+  isLoading: boolean
+}
