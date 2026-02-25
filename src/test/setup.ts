@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom'
+import 'vitest-canvas-mock'
 
 // Mock crypto.randomUUID for node environment
 if (typeof globalThis.crypto === 'undefined') {
