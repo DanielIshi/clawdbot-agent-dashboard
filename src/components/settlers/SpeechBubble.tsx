@@ -10,6 +10,7 @@
 
 import React from 'react'
 import type { SpeechBubble } from './types'
+import { truncateToLines } from './textTruncate'
 
 interface SpeechBubbleComponentProps {
   bubble: SpeechBubble
@@ -20,6 +21,9 @@ export const SpeechBubbleComponent: React.FC<SpeechBubbleComponentProps> = ({ bu
   if (!bubble.visible) {
     return null
   }
+
+  // Truncate text to max 3 lines (AC5)
+  const displayText = truncateToLines(bubble.text, 3, 40)
 
   return (
     <div
@@ -73,8 +77,8 @@ export const SpeechBubbleComponent: React.FC<SpeechBubbleComponentProps> = ({ bu
         }}
       />
 
-      {/* Text content */}
-      {bubble.text}
+      {/* Text content (truncated to max 3 lines) */}
+      {displayText}
     </div>
   )
 }
