@@ -132,3 +132,15 @@ export interface Building {
   issueCount: number
   prCount: number
 }
+
+/**
+ * Speech Bubble (Issue #57, AC1)
+ * Sprechblase für Live-Agent-Output
+ */
+export interface SpeechBubble {
+  agentId: string                    // Agent-ID (eindeutig)
+  text: string                       // Angezeigter Text
+  position: IsometricCoordinates     // Position auf Canvas (über Agent-Sprite)
+  visible: boolean                   // Sichtbarkeit
+  opacity: number                    // Transparenz (0.0 - 1.0)
+}
