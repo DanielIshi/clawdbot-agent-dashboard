@@ -144,3 +144,19 @@ export interface SpeechBubble {
   visible: boolean                   // Sichtbarkeit
   opacity: number                    // Transparenz (0.0 - 1.0)
 }
+
+/**
+ * Session Status (Issue #58)
+ */
+export type SessionStatus = 'active' | 'done' | 'failed'
+
+/**
+ * Session (Issue #58, AC2)
+ * Repräsentiert eine Agent-Session mit Live-Logs
+ */
+export interface Session {
+  id: string                         // Session-ID (eindeutig)
+  status: SessionStatus              // Aktueller Status
+  lastActivity: string               // ISO-Timestamp (für Sortierung)
+  output: string                     // Live-Output (Log-Text)
+}

@@ -15,6 +15,7 @@ import { MetricsDashboard } from './components/MetricsDashboard'
 import { QuotaStatus } from './components/QuotaStatus'
 import CostDashboard from './pages/CostDashboard'
 import { IsometricCanvas } from './components/settlers/IsometricCanvas'
+import { SessionSidebar } from './components/settlers/SessionSidebar'
 
 // Navigation items
 const navItems = [
@@ -216,19 +217,25 @@ function AppContent() {
         ) : currentView === 'agent-monitor' ? (
           <div className="p-4">Agent Monitor disabled for debug</div>
         ) : currentView === 'settlers' ? (
-          <div className="p-4 lg:p-6">
-            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-white">Settlers Dashboard (Issue #53)</h2>
-                <span className="text-xs text-gray-500">Isometrische Canvas-Basis mit Grid-System</span>
+          <div className="relative">
+            {/* Main Canvas Area */}
+            <div className="p-4 lg:p-6 lg:pr-[324px]">
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-white">Settlers Dashboard (Issues #53-58)</h2>
+                  <span className="text-xs text-gray-500">Isometrische Canvas mit Agent-Sprites & Sessions</span>
+                </div>
+                <IsometricCanvas
+                  debug={true}
+                  onTileClick={(coords) => {
+                    console.log('Tile clicked:', coords)
+                  }}
+                />
               </div>
-              <IsometricCanvas
-                debug={true}
-                onTileClick={(coords) => {
-                  console.log('Tile clicked:', coords)
-                }}
-              />
             </div>
+
+            {/* Session Sidebar (Issue #58) */}
+            <SessionSidebar />
           </div>
         ) : currentView === 'metrics' ? (
           <MetricsDashboard />
