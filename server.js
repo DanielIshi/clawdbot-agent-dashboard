@@ -10,23 +10,21 @@ const app = express();
 const PORT = process.env.PORT || 3456;
 
 const HOME = process.env.HOME || '/home/claude';
-const CODEX_SESSIONS_DIR = path.join(HOME, '.codex-agent', 'sessions');
-const CODEX_LOGS_DIR = path.join(HOME, '.codex-agent', 'logs');
-const CLAUDE_SESSIONS_DIR = path.join(HOME, '.claude-agent', 'sessions');
-const CLAUDE_LOGS_DIR = path.join(HOME, '.claude-agent', 'logs');
+const SESSIONS_DIR = path.join(HOME, '.codex-agent', 'sessions');
+const LOGS_DIR = path.join(HOME, '.codex-agent', 'logs');
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 function getDemoSessions() {
   return [
     {
-      name: 'claude-builder',
+      name: 'claude-opus',
       type: 'claude',
       status: 'active',
       project: 'agent-dashboard',
       startedAt: new Date(Date.now() - 3600000).toISOString(),
       lastActivity: new Date().toISOString(),
-      lastOutput: 'Implementing isometric tile renderer with Three.js...',
+      lastOutput: 'Implementing isometric terrain and speech bubble overlay...',
       tool: 'coder'
     },
     {
@@ -46,16 +44,15 @@ function getDemoSessions() {
       project: 'docs-gen',
       startedAt: new Date(Date.now() - 7200000).toISOString(),
       lastActivity: new Date(Date.now() - 600000).toISOString(),
-      lastOutput: 'Research complete: 12 relevant papers on CRDT sync.',
+      lastOutput: 'Research complete: 12 relevant papers summarized.',
       tool: 'researcher'
     }
   ];
 }
 
 function detectAgentType(data) {
-  const name = (data.name || '').toLowerCase();
+  const name = `${data.name || ''}`.toLowerCase();
   if (name.includes('codex')) return 'codex';
-  if (name.includes('jules')) return 'jules';
   if (name.includes('gpt') || name.includes('openai')) return 'gpt';
   if (name.includes('ollama') || name.includes('llama')) return 'ollama';
   return 'claude';
@@ -69,7 +66,7 @@ function mapStatus(status) {
 }
 
 function parseStreamJson(raw) {
-  if (!raw || typeof raw !== 'string') return raw || '';
+  if (!raw || typeof raw !== 'string') return '';
   try {
     const parsed = JSON.parse(raw);
     if (parsed.type === 'result') {
@@ -79,8 +76,7 @@ function parseStreamJson(raw) {
       return `Finished (${parsed.subtype || 'done'})`;
     }
     if (parsed.type === 'assistant' && parsed.message && parsed.message.content) {
-      const contents = parsed.message.content;
-      for (const c of contents) {
+      for (const c of parsed.message.content) {
         if (c.type === 'text' && c.text) return c.text.trim().substring(0, 200);
         if (c.type === 'tool_use') {
           const toolName = c.name || 'tool';
@@ -98,13 +94,13 @@ function parseStreamJson(raw) {
   }
 }
 
-function getLastOutput(name, logsDir) {
-  const logFile = path.join(logsDir, `${name}.log`);
+function getLastOutput(name) {
+  const logFile = path.join(LOGS_DIR, `${name}.log`);
   try {
     if (!fs.existsSync(logFile)) return '';
     const content = fs.readFileSync(logFile, 'utf8');
     const lines = content.split('\n').filter((l) => l.trim());
-    for (let i = lines.length - 1; i >= Math.max(0, lines.length - 30); i -= 1) {
+    for (let i = lines.length - 1; i >= Math.max(0, lines.length - 25); i -= 1) {
       const parsed = parseStreamJson(lines[i]);
       if (parsed) return parsed;
     }
@@ -116,8 +112,8 @@ function getLastOutput(name, logsDir) {
 
 function detectProject(data) {
   if (data.project) return data.project;
-  const prompt = (data.prompt || '').toLowerCase();
-  const name = (data.name || '').toLowerCase();
+  const prompt = `${data.prompt || ''}`.toLowerCase();
+  const name = `${data.name || ''}`.toLowerCase();
   if (prompt.includes('dashboard') || name.includes('dashboard')) return 'agent-dashboard';
   if (prompt.includes('issue')) return 'issue-work';
   if (prompt.includes('research') || name.includes('research')) return 'research';
@@ -125,61 +121,56 @@ function detectProject(data) {
   return name || 'unknown';
 }
 
-function readSessionsFrom(dir, logsDir) {
+function getRealSessions() {
   try {
-    if (!fs.existsSync(dir)) return [];
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-    return files.map((f) => {
-      try {
-        const data = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
-        const name = data.name || path.basename(f, '.json');
-        const rawOutput = data.lastOutput || '';
-        const parsedOutput = parseStreamJson(rawOutput);
-        const lastOutput = parsedOutput || getLastOutput(name, logsDir) || (data.prompt ? data.prompt.substring(0, 100) : '');
-        return {
-          name,
-          type: detectAgentType(data),
-          status: mapStatus(data.status),
-          project: detectProject(data),
-          startedAt: data.start_time || data.startedAt || new Date().toISOString(),
-          lastActivity: data.lastActivity || new Date().toISOString(),
-          lastOutput,
-          tool: data.tool || 'coder'
-        };
-      } catch {
-        return null;
-      }
-    }).filter(Boolean);
+    if (!fs.existsSync(SESSIONS_DIR)) return [];
+    const files = fs.readdirSync(SESSIONS_DIR).filter((f) => f.endsWith('.json'));
+    return files
+      .map((file) => {
+        try {
+          const raw = fs.readFileSync(path.join(SESSIONS_DIR, file), 'utf8');
+          const data = JSON.parse(raw);
+          const name = data.name || path.basename(file, '.json');
+          const parsedOutput = parseStreamJson(data.lastOutput || '');
+          const lastOutput =
+            parsedOutput ||
+            getLastOutput(name) ||
+            (data.prompt ? `${data.prompt}`.substring(0, 100) : '');
+          return {
+            name,
+            type: detectAgentType(data),
+            status: mapStatus(data.status),
+            project: detectProject(data),
+            startedAt: data.start_time || data.startedAt || new Date().toISOString(),
+            lastActivity: data.lastActivity || new Date().toISOString(),
+            lastOutput,
+            tool: data.tool || 'coder'
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
   } catch {
     return [];
   }
 }
 
-function getRealSessions() {
-  const codexSessions = readSessionsFrom(CODEX_SESSIONS_DIR, CODEX_LOGS_DIR);
-  const claudeSessions = readSessionsFrom(CLAUDE_SESSIONS_DIR, CLAUDE_LOGS_DIR);
-  return [...codexSessions, ...claudeSessions];
-}
-
 app.get('/api/sessions', (req, res) => {
   const real = getRealSessions();
-  res.json(real.length > 0 ? real : getDemoSessions());
+  const payload = real.length > 0 ? real : getDemoSessions();
+  res.json(payload);
 });
 
 app.get('/api/sessions/:name/log', (req, res) => {
-  const name = req.params.name;
-  const logFile = [
-    path.join(CODEX_LOGS_DIR, `${name}.log`),
-    path.join(CLAUDE_LOGS_DIR, `${name}.log`)
-  ].find((candidate) => fs.existsSync(candidate));
-
+  const logFile = path.join(LOGS_DIR, `${req.params.name}.log`);
   try {
-    if (logFile) {
+    if (fs.existsSync(logFile)) {
       const content = fs.readFileSync(logFile, 'utf8');
-      const lines = content.split('\n').slice(-50);
-      res.json({ name, lines });
+      const lines = content.split('\n').slice(-60);
+      res.json({ name: req.params.name, lines });
     } else {
-      res.json({ name, lines: ['No log file found.'] });
+      res.json({ name: req.params.name, lines: ['No log file found.'] });
     }
   } catch {
     res.status(500).json({ error: 'Failed to read log' });
@@ -191,14 +182,13 @@ app.get('/health', (req, res) => {
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
-    codex_sessions: CODEX_SESSIONS_DIR,
-    claude_sessions: CLAUDE_SESSIONS_DIR,
-    logs: CODEX_LOGS_DIR
+    sessions_dir: SESSIONS_DIR,
+    logs_dir: LOGS_DIR
   });
 });
 
 app.listen(PORT, () => {
   console.log(`Agent Dashboard running at http://localhost:${PORT}`);
-  console.log(`Codex sessions: ${CODEX_SESSIONS_DIR}`);
-  console.log(`Claude sessions: ${CLAUDE_SESSIONS_DIR}`);
+  console.log(`Sessions dir: ${SESSIONS_DIR}`);
+  console.log(`Logs dir: ${LOGS_DIR}`);
 });
