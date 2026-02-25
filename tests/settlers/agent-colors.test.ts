@@ -75,16 +75,25 @@ describe('Agent Color Mappings', () => {
 
   describe('getAgentHighlightColor()', () => {
     it('sollte hellere Farbe als Original erzeugen', () => {
-      const original = getAgentColor('gpt')
-      const highlight = getAgentHighlightColor('gpt')
+      // Verwende Claude (nicht GPT, weil GPT R=255 hat)
+      const original = getAgentColor('claude')
+      const highlight = getAgentHighlightColor('claude')
 
       // Beide sollten gültige Hex-Farben sein
       expect(highlight).toMatch(/^#[0-9a-f]{6}$/i)
 
-      // Highlight sollte heller sein (größere RGB-Werte)
+      // Highlight sollte heller sein (größere oder gleiche RGB-Werte)
       const origR = parseInt(original.slice(1, 3), 16)
+      const origG = parseInt(original.slice(3, 5), 16)
+      const origB = parseInt(original.slice(5, 7), 16)
+
       const highlightR = parseInt(highlight.slice(1, 3), 16)
-      expect(highlightR).toBeGreaterThan(origR)
+      const highlightG = parseInt(highlight.slice(3, 5), 16)
+      const highlightB = parseInt(highlight.slice(5, 7), 16)
+
+      // Mindestens ein Kanal sollte heller sein
+      const anyBrighter = highlightR > origR || highlightG > origG || highlightB > origB
+      expect(anyBrighter).toBe(true)
     })
 
     it('sollte RGB-Werte nicht über 255 gehen', () => {
@@ -100,7 +109,7 @@ describe('Agent Color Mappings', () => {
     })
 
     it('sollte mit custom brightness-Faktor funktionieren', () => {
-      const lessB right = getAgentHighlightColor('claude', 0.1)  // 10% heller
+      const lessBright = getAgentHighlightColor('claude', 0.1)  // 10% heller
       const moreBright = getAgentHighlightColor('claude', 0.5)   // 50% heller
 
       const lessR = parseInt(lessBright.slice(1, 3), 16)
