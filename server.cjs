@@ -102,9 +102,20 @@ app.get('/api/sessions/:name/tmux-output', (req, res) => {
   });
 });
 
-const distPath = __dirname;
+const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(path.join(distPath, 'index.html'))) {
-  app.use(express.static(distPath));
+  // Serve static files with correct MIME types
+  app.use(express.static(distPath, {
+    setHeaders: (res, filepath) => {
+      if (filepath.endsWith('.js')) {
+        res.setHeader('Content-Type', 'application/javascript');
+      } else if (filepath.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css');
+      } else if (filepath.endsWith('.html')) {
+        res.setHeader('Content-Type', 'text/html');
+      }
+    }
+  }));
   app.get('/', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
 

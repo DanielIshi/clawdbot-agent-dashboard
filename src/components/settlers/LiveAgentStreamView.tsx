@@ -53,17 +53,16 @@ export const LiveAgentStreamView: React.FC = () => {
 
   const topSessions = useMemo(() => sortedSessions.slice(0, QUARTER_COUNT), [sortedSessions])
   const sessionNames = useMemo(() => topSessions.map(s => s.name || '').filter(Boolean), [topSessions])
-  
+
   const chatMap = useSessionLogPolling(sessionNames)
-  const tmuxMap = useTmuxOutputPolling(topSessions)
   const quarters = Array.from({ length: QUARTER_COUNT }, (_, i) => topSessions[i] || null)
 
   return (
     <div className="p-4 lg:p-6">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white">🤖 Live Agent Team</h2>
-          <p className="text-sm text-gray-400">Chat mit deinen Agenten</p>
+          <h2 className="text-xl font-bold text-white">📋 Agent Logs & Chat</h2>
+          <p className="text-sm text-gray-400">Strukturierte Logs mit Chat-Interaktion</p>
         </div>
         {loading && <span className="text-xs text-gray-400">Lade...</span>}
       </div>
@@ -85,14 +84,13 @@ export const LiveAgentStreamView: React.FC = () => {
           }
 
           const chatData = chatMap.get(session.name || '')
-          const tmuxOutput = tmuxMap.get(session.name || '')
           let chatMessages: ChatMessage[] = []
           try {
             chatData && chatData.includes('{') ? chatMessages = JSON.parse(chatData) : chatMessages = []
           } catch { chatMessages = [] }
 
           return (
-            <AgentQuarter key={session.name || index} session={session} chatMessages={chatMessages} tmuxOutput={tmuxOutput} />
+            <AgentQuarter key={session.name || index} session={session} chatMessages={chatMessages} />
           )
         })}
       </div>
@@ -100,39 +98,8 @@ export const LiveAgentStreamView: React.FC = () => {
   )
 }
 
-// Hook for Tmux output polling
-function useTmuxOutputPolling(sessions: LiveAgentSession[]): Map<string, string> {
-  const [outputMap, setOutputMap] = useState<Map<string, string>>(new Map())
-
-  useEffect(() => {
-    if (sessions.length === 0) return
-
-    const fetchTmux = async () => {
-      const results = await Promise.all(
-        sessions.map(async (s) => {
-          if (!s.name) return [s.name || '', ''] as const
-          try {
-            const res = await fetch(`/api/sessions/${encodeURIComponent(s.name)}/tmux-output`)
-            const data = await res.json()
-            return [s.name, data.output || ''] as const
-          } catch {
-            return [s.name, ''] as const
-          }
-        })
-      )
-      setOutputMap(new Map(results))
-    }
-
-    fetchTmux()
-    const interval = setInterval(fetchTmux, 3000)
-    return () => clearInterval(interval)
-  }, [sessions])
-
-  return outputMap
-}
-
 // Einzelne Agenten-Quarter mit Chat!
-function AgentQuarter({ session, chatMessages, tmuxOutput }: { session: LiveAgentSession, chatMessages: ChatMessage[], tmuxOutput?: string }) {
+function AgentQuarter({ session, chatMessages }: { session: LiveAgentSession, chatMessages: ChatMessage[] }) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
@@ -179,17 +146,12 @@ function AgentQuarter({ session, chatMessages, tmuxOutput }: { session: LiveAgen
         </div>
       </div>
 
-      {/* Chat-Output (Tmux bevorzugt, sonst Logs) */}
+      {/* Chat-Output (Strukturierte Logs) */}
       <div className="flex-1 overflow-auto font-mono text-xs space-y-1 mb-2">
-        {tmuxOutput && tmuxOutput.trim() ? (
-          // Tmux Live-Output (raw terminal)
-          <pre className="text-gray-300 text-[10px] whitespace-pre-wrap leading-tight">
-            {tmuxOutput.split('\n').slice(-20).join('\n')}
-          </pre>
-        ) : chatMessages.length === 0 ? (
+        {chatMessages.length === 0 ? (
           <p className="text-gray-600 italic text-xs">Warte auf Activity...</p>
         ) : (
-          // Parsed Chat-Output (Fallback)
+          // Parsed Chat-Output
           chatMessages.slice(-15).map((msg, i) => (
             <div key={i} className={roleColors[msg.role] || 'text-gray-300'}>
               <span className="text-gray-600 text-[9px] mr-1">

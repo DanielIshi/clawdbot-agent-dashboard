@@ -17,6 +17,7 @@ import CostDashboard from './pages/CostDashboard'
 import { IsometricCanvas } from './components/settlers/IsometricCanvas'
 import { SessionSidebar } from './components/settlers/SessionSidebar'
 import { LiveAgentStreamView } from './components/settlers/LiveAgentStreamView'
+import { TmuxLiveView } from './components/settlers/TmuxLiveView'
 
 // Navigation items
 const navItems = [
@@ -49,10 +50,19 @@ const navItems = [
   },
   {
     key: 'live-stream',
-    label: 'Live Stream',
+    label: 'Agent Logs',
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14m-6 0h.01M3 6a2 2 0 012-2h9a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    key: 'tmux-view',
+    label: 'Tmux Live',
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     ),
   },
@@ -228,6 +238,8 @@ function AppContent() {
           <div className="p-4">Agent Monitor disabled for debug</div>
         ) : currentView === 'live-stream' ? (
           <LiveAgentStreamView />
+        ) : currentView === 'tmux-view' ? (
+          <TmuxLiveView />
         ) : currentView === 'settlers' ? (
           <div className="relative">
             {/* Main Canvas Area */}
