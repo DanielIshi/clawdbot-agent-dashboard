@@ -1,193 +1,346 @@
 /**
- * Agent Dashboard Server
+ * Agent Dashboard - Unified Server
+ * Alles in einer Datei: Static Files + REST API + WebSocket
+ * Start: node server.cjs
  */
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
 
-const app = express();
-app.use(express.json());
-const PORT = process.env.PORT || 3456;
+const express = require('express')
+const http = require('http')
+const { WebSocketServer } = require('ws')
+const { exec } = require('child_process')
+const fs = require('fs')
+const path = require('path')
+const crypto = require('crypto')
 
-const SESSION_DIRS = ['/home/claude/.codex-agent/sessions', '/home/claude/.claude-agent/sessions'];
-const LOG_DIRS = ['/home/claude/.codex-agent/logs', '/home/claude/.claude-agent/logs'];
+const app = express()
+const server = http.createServer(app)
+const PORT = process.env.PORT || 3456
 
-app.get('/api/sessions', (req, res) => {
-  const all = [];
-  const seenIds = new Set();
+app.use(express.json())
 
-  // 1) Read sessions from JSON files
-  SESSION_DIRS.forEach(dir => {
-    if (fs.existsSync(dir)) {
-      fs.readdirSync(dir).filter(f => f.endsWith('.json')).forEach(file => {
-        try {
-          const d = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf-8'));
-          const id = d.name || file.replace('.json', '');
-          const stat = fs.statSync(path.join(dir, file));
+// CORS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*')
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  if (req.method === 'OPTIONS') return res.sendStatus(200)
+  next()
+})
 
-          // Map status to frontend SessionStatus: 'active' | 'done' | 'failed'
-          let status = 'active';
-          if (d.status === 'completed' || d.status === 'done') status = 'done';
-          else if (d.status === 'failed' || d.status === 'error') status = 'failed';
-          else if (d.status === 'active' || d.status === 'running') status = 'active';
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-          seenIds.add(id);
-          all.push({
-            id,
-            status,
-            lastActivity: d.lastActivity || d.end_time || d.start_time || stat.mtime.toISOString(),
-            output: d.prompt || d.task || d.lastOutput || '',
-            // Extra fields for compatibility
-            name: id,
-            type: dir.includes('codex') ? 'codex' : 'claude',
-            project: d.project || 'unknown',
-            tmux_session: d.tmux_session || null,
-          });
-        } catch {}
-      });
-    }
-  });
-
-  // 2) Detect live tmux sessions
-  try {
-    const { execSync } = require('child_process');
-    const tmuxOutput = execSync('tmux list-sessions -F "#{session_name}|#{session_created}|#{session_activity}" 2>/dev/null', { encoding: 'utf-8' });
-    tmuxOutput.trim().split('\n').filter(Boolean).forEach(line => {
-      const [name, created, activity] = line.split('|');
-      if (!name) return;
-      // Skip if already found in JSON files
-      if (seenIds.has(name)) {
-        // Update existing entry to active if tmux session is live
-        const existing = all.find(s => s.id === name || s.tmux_session === name);
-        if (existing) existing.status = 'active';
-        return;
-      }
-      seenIds.add(name);
-
-      // Capture last few lines of tmux pane as output
-      let output = '';
-      try {
-        output = execSync(`tmux capture-pane -t ${name} -p -S -5 2>/dev/null`, { encoding: 'utf-8' }).trim();
-      } catch {}
-
-      all.push({
-        id: name,
-        status: 'active',
-        lastActivity: activity ? new Date(parseInt(activity) * 1000).toISOString() : new Date().toISOString(),
-        output: output || `tmux session: ${name}`,
-        name,
-        type: 'tmux',
-        project: 'unknown',
-        tmux_session: name,
-      });
-    });
-  } catch {}
-
-  // Sort by lastActivity (newest first)
-  all.sort((a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime());
-
-  res.json(all);
-});
-
-app.get('/api/sessions/:name/log', (req, res) => {
-  const name = req.params.name;
-  let logContent = '';
-  LOG_DIRS.forEach(dir => {
-    const p = path.join(dir, name + '.log');
-    if (fs.existsSync(p)) logContent = fs.readFileSync(p, 'utf-8');
-  });
-
-  const lines = logContent.split('\n').filter(l => l.trim()).slice(-100);
-
-  // Parse log lines into chat format
-  const chat = lines.map(line => {
-    let role = 'system';
-    let text = line;
-
-    // Detect role from line content
-    if (line.includes('USER:') || line.includes('👤')) {
-      role = 'user';
-      text = line.replace(/^.*?(USER:|👤)\s*/, '');
-    } else if (line.includes('AGENT:') || line.includes('ASSISTANT:') || line.includes('🤖')) {
-      role = 'assistant';
-      text = line.replace(/^.*?(AGENT:|ASSISTANT:|🤖)\s*/, '');
-    } else if (line.includes('THINK:') || line.includes('💭')) {
-      role = 'thinking';
-      text = line.replace(/^.*?(THINK:|💭)\s*/, '');
-    } else if (line.includes('TOOL:') || line.includes('🔧')) {
-      role = 'tool';
-      text = line.replace(/^.*?(TOOL:|🔧)\s*/, '');
-    } else if (line.includes('✅') || line.includes('DONE:')) {
-      role = 'tool_done';
-      text = line.replace(/^.*?(DONE:|✅)\s*/, '');
-    } else if (line.includes('📊') || line.includes('SUMMARY:')) {
-      role = 'summary';
-      text = line.replace(/^.*?(SUMMARY:|📊)\s*/, '');
-    }
-
-    // Extract timestamp if present
-    const timeMatch = line.match(/\[(\d{2}:\d{2}:\d{2})\]|\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\]/);
-    const time = timeMatch ? (timeMatch[1] || timeMatch[2]) : undefined;
-
-    return { role, text: text.trim(), time };
-  });
-
-  res.json({ chat, name });
-});
-
-// NEW: Tmux output capture endpoint
-app.get('/api/sessions/:name/tmux-output', (req, res) => {
-  const name = req.params.name;
-
-  // Load session JSON to get tmux_session field
-  let sessionData = null;
-  SESSION_DIRS.forEach(dir => {
-    const p = path.join(dir, name + '.json');
-    if (fs.existsSync(p)) {
-      try {
-        sessionData = JSON.parse(fs.readFileSync(p, 'utf-8'));
-      } catch (e) {}
-    }
-  });
-
-  if (!sessionData || !sessionData.tmux_session) {
-    return res.json({ output: '', error: 'No tmux session registered', name });
-  }
-
-  // Execute tmux capture-pane
-  exec(`tmux capture-pane -t ${sessionData.tmux_session} -p -S -100`, (error, stdout) => {
-    if (error) {
-      return res.json({ output: '', error: error.message, name, session: sessionData.tmux_session });
-    }
-    res.json({ output: stdout, name, session: sessionData.tmux_session });
-  });
-});
-
-const distPath = path.join(__dirname, 'dist');
-if (fs.existsSync(path.join(distPath, 'index.html'))) {
-  const mimeHeaders = {
-    setHeaders: (res, filepath) => {
-      if (filepath.endsWith('.js')) {
-        res.setHeader('Content-Type', 'application/javascript');
-      } else if (filepath.endsWith('.css')) {
-        res.setHeader('Content-Type', 'text/css');
-      } else if (filepath.endsWith('.html')) {
-        res.setHeader('Content-Type', 'text/html');
-      }
-    }
-  };
-  // Serve at root AND under /agent-dashboard/ prefix (Vite base path)
-  app.use(express.static(distPath, mimeHeaders));
-  app.use('/agent-dashboard', express.static(distPath, mimeHeaders));
-  // SPA fallback: serve index.html for all non-API routes (React Router support)
-  app.use((req, res, next) => {
-    if (req.method === 'GET' && !req.path.startsWith('/api/')) {
-      res.sendFile(path.join(distPath, 'index.html'));
-    } else {
-      next();
-    }
-  });
+function execAsync(cmd) {
+  return new Promise((resolve, reject) => {
+    exec(cmd, { timeout: 5000 }, (err, stdout) => {
+      if (err) reject(err)
+      else resolve(stdout)
+    })
+  })
 }
 
-app.listen(PORT, () => console.log(`Agent Dashboard: http://localhost:${PORT}`));
+const SESSION_DIRS = [
+  '/home/claude/.codex-agent/sessions',
+  '/home/claude/.claude-agent/sessions',
+]
+
+function readAgentSessions() {
+  const sessions = []
+  SESSION_DIRS.forEach(dir => {
+    if (!fs.existsSync(dir)) return
+    try {
+      fs.readdirSync(dir)
+        .filter(f => f.endsWith('.json'))
+        .forEach(file => {
+          try {
+            const data = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf-8'))
+            sessions.push({
+              name: data.name || file.replace('.json', ''),
+              type: dir.includes('codex') ? 'codex' : 'claude',
+              source: 'agent',
+              status: data.status || 'active',
+              project: data.working_dir || data.project || 'unknown',
+            })
+          } catch { /* skip corrupt file */ }
+        })
+    } catch { /* skip unreadable dir */ }
+  })
+  return sessions
+}
+
+async function readTmuxSessions() {
+  try {
+    const out = await execAsync('tmux list-sessions -F "#{session_name}|#{session_created}" 2>/dev/null')
+    return out.trim().split('\n').filter(Boolean).map(line => {
+      const [name, created] = line.split('|')
+      return {
+        agent: name,
+        tmux_id: name,
+        started: created
+          ? new Date(parseInt(created) * 1000).toISOString()
+          : new Date().toISOString(),
+        project: 'tmux-session',
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
+function safeName(name) {
+  return name.replace(/[^a-zA-Z0-9-_]/g, '')
+}
+
+// ─── WebSocket ────────────────────────────────────────────────────────────────
+
+const wss = new WebSocketServer({ server, path: '/ws/agentops' })
+const clients = new Map() // clientId → ws
+
+function broadcast(event) {
+  const msg = JSON.stringify(event)
+  clients.forEach(ws => {
+    if (ws.readyState === ws.OPEN) ws.send(msg)
+  })
+}
+
+wss.on('connection', (ws, req) => {
+  const clientId = crypto.randomUUID()
+  clients.set(clientId, ws)
+  console.log(`[WS] connect ${clientId} from ${req.socket.remoteAddress}`)
+
+  ws.isAlive = true
+  ws.on('pong', () => { ws.isAlive = true })
+
+  ws.on('message', data => {
+    try {
+      const msg = JSON.parse(data.toString())
+      switch (msg.type) {
+        case 'handshake':
+          ws.send(JSON.stringify({ type: 'handshake_ack', client_id: clientId }))
+          break
+        case 'subscribe':
+          ws.send(JSON.stringify({ type: 'subscribe_ack', subscribed: msg.topics || ['all'] }))
+          break
+        case 'ping':
+          ws.send(JSON.stringify({ type: 'pong' }))
+          break
+        case 'command':
+          if (msg.command === 'get_snapshot') {
+            // Send empty snapshot - dashboard reads live data via REST
+            ws.send(JSON.stringify({
+              type: 'snapshot',
+              agents: [],
+              issues: [],
+              seq: 0
+            }))
+          }
+          break
+      }
+    } catch { /* ignore bad messages */ }
+  })
+
+  ws.on('close', () => {
+    clients.delete(clientId)
+    console.log(`[WS] disconnect ${clientId}`)
+  })
+
+  ws.on('error', err => {
+    console.error(`[WS] error ${clientId}:`, err.message)
+    clients.delete(clientId)
+  })
+})
+
+// Heartbeat - detect dead connections
+const heartbeat = setInterval(() => {
+  wss.clients.forEach(ws => {
+    if (!ws.isAlive) { ws.terminate(); return }
+    ws.isAlive = false
+    ws.ping()
+  })
+}, 30000)
+
+wss.on('close', () => clearInterval(heartbeat))
+
+// Broadcast tmux session changes every 5s
+let lastSessionCount = -1
+setInterval(async () => {
+  const sessions = await readTmuxSessions()
+  if (sessions.length !== lastSessionCount) {
+    lastSessionCount = sessions.length
+    broadcast({
+      type: 'activity',
+      event_type: 'tmux.sessions.updated',
+      payload: { count: sessions.length, sessions }
+    })
+  }
+}, 5000)
+
+// ─── REST API ─────────────────────────────────────────────────────────────────
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), clients: clients.size })
+})
+
+// All sessions (agent files + tmux)
+app.get('/api/sessions', async (req, res) => {
+  const agentSessions = readAgentSessions()
+  const tmuxSessions = await readTmuxSessions()
+
+  // Add tmux sessions not already in agent files
+  tmuxSessions.forEach(ts => {
+    if (!agentSessions.find(s => s.name === ts.agent)) {
+      const agentType = ts.agent.startsWith('claude') ? 'claude'
+        : ts.agent.startsWith('codex') ? 'codex'
+        : ts.agent.startsWith('gemini') ? 'gemini'
+        : ts.agent.startsWith('opencode') ? 'opencode'
+        : ts.agent.startsWith('jules') ? 'jules'
+        : 'tmux'
+      agentSessions.push({
+        name: ts.agent,
+        type: agentType,
+        source: 'tmux',
+        status: 'active',
+        project: ts.project,
+      })
+    }
+  })
+
+  res.json(agentSessions)
+})
+
+// Tmux sessions only (for TmuxLiveView + SettlersWorldView)
+app.get('/api/tmux-sessions', async (req, res) => {
+  res.json(await readTmuxSessions())
+})
+
+// Tmux terminal output
+app.get('/api/sessions/:name/tmux-output', async (req, res) => {
+  const name = safeName(req.params.name)
+  try {
+    const output = await execAsync(`tmux capture-pane -t ${name} -p -S -200 2>/dev/null`)
+    res.json({ output })
+  } catch {
+    res.json({ output: '' })
+  }
+})
+
+app.get('/api/tmux/:name/output', async (req, res) => {
+  const name = safeName(req.params.name)
+  try {
+    const output = await execAsync(`tmux capture-pane -t ${name} -p -S -200 2>/dev/null`)
+    res.json({ active: true, output, name })
+  } catch (e) {
+    res.json({ active: false, output: '', name })
+  }
+})
+
+// Send message to tmux session
+app.post('/api/tmux/:name/chat', async (req, res) => {
+  const name = safeName(req.params.name)
+  const { message } = req.body
+  if (!message) return res.status(400).json({ error: 'message required' })
+  try {
+    const escaped = message.replace(/'/g, "'\\''")
+    await execAsync(`tmux send-keys -t ${name} '${escaped}' Enter`)
+    broadcast({ type: 'activity', event_type: 'agent.message', payload: { session: name, message } })
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+app.post('/api/sessions/:name/chat', async (req, res) => {
+  const name = safeName(req.params.name)
+  const { message } = req.body
+  if (!message) return res.status(400).json({ error: 'message required' })
+  try {
+    const escaped = message.replace(/'/g, "'\\''")
+    await execAsync(`tmux send-keys -t ${name} '${escaped}' Enter`)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// Send Enter key
+app.post('/api/tmux/:name/send-enter', async (req, res) => {
+  const name = safeName(req.params.name)
+  try {
+    await execAsync(`tmux send-keys -t ${name} '' Enter`)
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// Kill tmux session
+app.delete('/api/tmux-sessions/:name', async (req, res) => {
+  const name = safeName(req.params.name)
+  try {
+    await execAsync(`tmux kill-session -t ${name}`)
+    broadcast({ type: 'activity', event_type: 'session.killed', payload: { name } })
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// Start new tmux session
+app.post('/api/tmux-sessions/start', async (req, res) => {
+  const { type = 'claude', name, prompt = '', cwd = '/home/claude' } = req.body
+  if (!name) return res.status(400).json({ error: 'name required' })
+  const sName = safeName(name)
+  const safeCwd = cwd.replace(/[^a-zA-Z0-9/_.-]/g, '')
+
+  try {
+    await execAsync(`tmux new-session -d -s ${sName} -c ${safeCwd}`)
+    if (prompt) {
+      const escaped = prompt.replace(/'/g, "'\\''")
+      await execAsync(`tmux send-keys -t ${sName} '${escaped}' Enter`)
+    }
+    broadcast({ type: 'activity', event_type: 'session.started', payload: { name: sName, type } })
+    res.json({ success: true, name: sName })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// Stub endpoints so frontend doesn't get 404s
+app.get('/api/agents', (req, res) => res.json([]))
+app.get('/api/issues', (req, res) => res.json([]))
+app.get('/api/stats', (req, res) => res.json({ agents: 0, issues: 0, events: 0 }))
+app.get('/api/clawdbot-status', (req, res) => res.json({ active: false }))
+app.get('/api/cost/summary', (req, res) => res.json({ total: 0, entries: [] }))
+
+// ─── Static Frontend ──────────────────────────────────────────────────────────
+
+const distPath = path.join(__dirname, 'dist')
+if (fs.existsSync(distPath)) {
+  // Serve static assets at both / and /agent-dashboard/ (Vite base path)
+  app.use(express.static(distPath))
+  app.use('/agent-dashboard', express.static(distPath))
+  // SPA fallback - all non-API routes serve index.html
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/ws/')) return next()
+    res.sendFile(path.join(distPath, 'index.html'))
+  })
+} else {
+  console.warn('[!] dist/ not found - run: npm run build')
+}
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+
+server.listen(PORT, () => {
+  console.log(`
+╔══════════════════════════════════════════════════════╗
+║         Agent Dashboard - Unified Server             ║
+╠══════════════════════════════════════════════════════╣
+║  URL:       http://localhost:${PORT}                   ║
+║  WebSocket: ws://localhost:${PORT}/ws/agentops          ║
+╚══════════════════════════════════════════════════════╝
+  `)
+})
+
+process.on('SIGINT', () => {
+  console.log('\nShutting down...')
+  server.close(() => process.exit(0))
+})
