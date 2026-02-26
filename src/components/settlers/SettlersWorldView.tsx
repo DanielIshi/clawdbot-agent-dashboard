@@ -9,7 +9,8 @@ import { drawBuilding } from './BuildingRenderer'
 import { drawVoxelSprite, createAgentVoxels } from './VoxelRenderer'
 import { projectNameToColor } from './colorHash'
 import type { Building, TileConfig } from './types'
-import { useSessionOutputDiff, type BubbleType, type SessionActivity } from './useSessionOutputDiff'
+import { useSessionOutputDiff, type SessionActivity } from './useSessionOutputDiff'
+import type { BubbleType } from './useSessionOutputDiff'
 
 const TILE_CONFIG: TileConfig = { width: 64, height: 32 }
 const GRID_SIZE = 10
@@ -90,34 +91,43 @@ function drawNameLabel(
 }
 
 /**
- * Draws a canvas-native speech bubble above the agent figure.
+ * Draws a canvas-native multi-line speech bubble above the agent figure.
  * No DOM overlay needed — canvas-native avoids z-index / coordinate sync issues.
  */
 function drawSpeechBubble(
   ctx: CanvasRenderingContext2D,
-  text: string,
-  cx: number,   // center X (agent position)
-  cy: number,   // top Y (above agent figure)
+  lines: string[],  // Multi-line content
+  cx: number,       // center X (agent position)
+  cy: number,       // top Y (above agent figure)
   opacity: number,
   type: BubbleType
 ) {
-  if (opacity <= 0) return
-
-  const maxText = text.length > 40 ? text.slice(0, 38) + '…' : text
+  if (opacity <= 0 || lines.length === 0) return
 
   ctx.save()
   ctx.globalAlpha = opacity
 
-  ctx.font = '10px monospace'
-  const textWidth = ctx.measureText(maxText).width
-  const paddingX = 8
-  const paddingY = 5
-  const bubbleW = textWidth + paddingX * 2
-  const bubbleH = 22
+  const fontSize = 11
+  const lineHeight = fontSize + 5
+  const paddingX = 10
+  const paddingY = 8
+  const arrowSize = 7
+  const radius = 6
+
+  ctx.font = `${fontSize}px monospace`
+
+  // Breite = längste Zeile (min 120px, max 280px)
+  const maxLineWidth = Math.min(280, Math.max(120,
+    ...lines.map(l => ctx.measureText(l).width)
+  ))
+  const bubbleW = maxLineWidth + paddingX * 2
+  const bubbleH = lines.length * lineHeight + paddingY * 2
+
   const bubbleX = cx - bubbleW / 2
-  const bubbleY = cy - bubbleH - 10 // 10px above agent top
-  const radius = 5
-  const arrowSize = 6
+  const bubbleY = cy - bubbleH - arrowSize - 14  // 14px Abstand über Figur
+
+  // Bubble außerhalb Canvas nach oben begrenzen
+  const clampedBubbleY = Math.max(4, bubbleY)
 
   // Border color by type
   const borderColor: Record<BubbleType, string> = {
@@ -126,37 +136,68 @@ function drawSpeechBubble(
     output: '#22c55e',
   }
 
-  // Draw rounded rect bubble
+  const bgColor: Record<BubbleType, string> = {
+    input: 'rgba(239, 246, 255, 0.96)',
+    tool: 'rgba(255, 247, 237, 0.96)',
+    output: 'rgba(240, 253, 244, 0.96)',
+  }
+
+  // Rounded rect path
+  const bx = bubbleX
+  const by = clampedBubbleY
+  const bw = bubbleW
+  const bh = bubbleH
+
   ctx.beginPath()
-  ctx.moveTo(bubbleX + radius, bubbleY)
-  ctx.lineTo(bubbleX + bubbleW - radius, bubbleY)
-  ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY, bubbleX + bubbleW, bubbleY + radius)
-  ctx.lineTo(bubbleX + bubbleW, bubbleY + bubbleH - radius)
-  ctx.quadraticCurveTo(bubbleX + bubbleW, bubbleY + bubbleH, bubbleX + bubbleW - radius, bubbleY + bubbleH)
-  // Arrow notch bottom-center
-  ctx.lineTo(cx + arrowSize, bubbleY + bubbleH)
-  ctx.lineTo(cx, bubbleY + bubbleH + arrowSize) // arrow tip
-  ctx.lineTo(cx - arrowSize, bubbleY + bubbleH)
-  ctx.lineTo(bubbleX + radius, bubbleY + bubbleH)
-  ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleH, bubbleX, bubbleY + bubbleH - radius)
-  ctx.lineTo(bubbleX, bubbleY + radius)
-  ctx.quadraticCurveTo(bubbleX, bubbleY, bubbleX + radius, bubbleY)
+  ctx.moveTo(bx + radius, by)
+  ctx.lineTo(bx + bw - radius, by)
+  ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + radius)
+  ctx.lineTo(bx + bw, by + bh - radius)
+  ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - radius, by + bh)
+
+  // Pfeil nach unten nur wenn Bubble nicht nach oben geclamt
+  if (clampedBubbleY === bubbleY) {
+    ctx.lineTo(cx + arrowSize, by + bh)
+    ctx.lineTo(cx, by + bh + arrowSize)
+    ctx.lineTo(cx - arrowSize, by + bh)
+  }
+
+  ctx.lineTo(bx + radius, by + bh)
+  ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - radius)
+  ctx.lineTo(bx, by + radius)
+  ctx.quadraticCurveTo(bx, by, bx + radius, by)
   ctx.closePath()
 
-  // Fill
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.92)'
+  // Schatten
+  ctx.shadowColor = 'rgba(0,0,0,0.3)'
+  ctx.shadowBlur = 6
+  ctx.shadowOffsetY = 2
+
+  ctx.fillStyle = bgColor[type]
   ctx.fill()
 
-  // Border
+  ctx.shadowColor = 'transparent'
+  ctx.shadowBlur = 0
+  ctx.shadowOffsetY = 0
+
   ctx.strokeStyle = borderColor[type]
   ctx.lineWidth = 1.5
   ctx.stroke()
 
-  // Text
-  ctx.fillStyle = '#111827'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(maxText, cx, bubbleY + bubbleH / 2)
+  // Typ-Indikator: farbiger linker Balken
+  ctx.fillStyle = borderColor[type]
+  ctx.fillRect(bx, by + radius, 3, bh - radius * 2)
+
+  // Text zeilenweise rendern
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+
+  lines.forEach((line, i) => {
+    // Erste Zeile in Farbe (Typ-Hinweis), Rest dunkelgrau
+    ctx.fillStyle = i === 0 ? borderColor[type] : '#374151'
+    ctx.font = i === 0 ? `bold ${fontSize}px monospace` : `${fontSize}px monospace`
+    ctx.fillText(line, bx + paddingX + 4, by + paddingY + i * lineHeight)
+  })
 
   ctx.restore()
 }
@@ -286,8 +327,7 @@ export const SettlersWorldView: React.FC = () => {
         if (activity) {
           const opacity = bubbleOpacity(activity.ts, now)
           if (opacity > 0) {
-            // Position bubble 28px above the agent sprite top
-            drawSpeechBubble(ctx, activity.text, aSc.screenX, agentTopY - 28, opacity, activity.type)
+            drawSpeechBubble(ctx, activity.lines, aSc.screenX, agentTopY - 28, opacity, activity.type)
           }
         }
       })

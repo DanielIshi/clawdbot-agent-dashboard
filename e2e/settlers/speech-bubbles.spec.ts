@@ -82,14 +82,22 @@ test.describe('Settlers - Sprechblasen Aktivität', () => {
     const sessionName = 'claude-settler-fix'
     let callCount = 0
 
-    // Intercepte API: erster Call = leer, ab zweitem = neuer Text
+    // Intercepte API: erster Call = leer, ab zweitem = echter Multi-Line-Content
     await page.route(`**/api/sessions/${sessionName}/tmux-output`, (route) => {
       callCount++
       if (callCount === 1) {
         route.fulfill({ json: { output: '' } })
       } else {
         route.fulfill({
-          json: { output: `\n\nBash: running npm test\nProcessing results...\n` }
+          json: {
+            output: [
+              '❯ Bitte implementiere die Sprechblasen-Feature',
+              '● Verstanden, ich fange jetzt an...',
+              '⎿ Bash: npm run build',
+              '⎿ Running 42 tests...',
+              '● Alle Tests grün, fertig!',
+            ].join('\n')
+          }
         })
       }
     })

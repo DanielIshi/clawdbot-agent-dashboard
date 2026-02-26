@@ -2,10 +2,9 @@
  * useSessionOutputDiff - Pollt tmux-Output pro Session und erkennt neue Aktivität via Diff
  *
  * - Pollt alle 2s `/api/sessions/:name/tmux-output` pro Session
- * - Vergleicht mit vorherigem Output → neue letzte Zeile = Aktivität
- * - Stripped ANSI-Codes
- * - Erkennt Typ: 'input' | 'tool' | 'output'
- * - Gibt Map<sessionName, { text, type, ts }> zurück
+ * - Stripped ANSI-Codes + Status-Bar-Noise
+ * - Extrahiert bis zu MAX_LINES sinnvolle Content-Zeilen
+ * - Gibt Map<sessionName, { lines, type, ts }> zurück
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -13,39 +12,66 @@ import { useState, useEffect, useRef } from 'react'
 export type BubbleType = 'input' | 'tool' | 'output'
 
 export interface SessionActivity {
-  text: string
+  lines: string[]   // Multi-line content (up to MAX_LINES)
   type: BubbleType
   ts: number
 }
 
-// Stripped ANSI escape codes
-const stripAnsi = (str: string): string =>
-  str.replace(/\x1b\[[0-9;]*[mGKHFJA-Za-z]/g, '').replace(/\r/g, '')
+const MAX_LINES = 6  // Maximale Anzahl Zeilen in der Sprechblase
 
-// Detect bubble type from cleaned line
-function detectType(line: string): BubbleType {
+// Strip ANSI escape codes + carriage returns
+const stripAnsi = (s: string): string =>
+  s.replace(/\x1b\[[0-9;]*[mGKHFJA-Za-z]/g, '').replace(/\r/g, '')
+
+// Noise-Zeilen überspringen (Status-Bar, Trennlinien, tmux-Chrome)
+const NOISE_LINE = /^[\s─═\-=|╔╗╚╝╠╣╦╩╬❯>$#*+⏵⏸⏺]+$/ // Nur Sonderzeichen
+const NOISE_CONTENT = /bypass permissions|shift\+tab|esc to interrupt|Auto-update failed|claude doctor|npm i -g @anthropic|Pontificating…|thought for \d|api\/sessions/i
+const NOISE_SHORT = 3 // Zeilen kürzer als N Zeichen überspringen
+
+function isNoise(line: string): boolean {
+  if (line.length < NOISE_SHORT) return true
+  if (NOISE_LINE.test(line)) return true
+  if (NOISE_CONTENT.test(line)) return true
+  return false
+}
+
+// Typ einer Zeile bestimmen
+function lineType(line: string): BubbleType {
   const l = line.trim()
-  if (/^(>|Human:|User:|Input:|\$\s)/i.test(l)) return 'input'
-  if (/Tool.*use|Bash|Read|Write|Edit|Glob|Grep|WebFetch|WebSearch|Task\(/i.test(l)) return 'tool'
+  // User-Eingabe: ❯ prefix oder klassische Prompt-Marker
+  if (/^[❯>]\s/.test(l) || /^(Human:|User:|Input:)/i.test(l)) return 'input'
+  // Tool-Result: ⎿ prefix oder bekannte Tool-Namen
+  if (/^⎿/.test(l) || /^(Bash|Read|Write|Edit|Glob|Grep|WebFetch|WebSearch|Task\()/i.test(l)) return 'tool'
+  // Claude-Antwort: ● prefix oder langer Satz
   return 'output'
 }
 
-// Extract best representative line from output block
-function extractBestLine(lines: string[]): string | null {
-  // Work backwards: find last non-empty, non-noise line
-  const noise = /^[\s$>─═\-=|╔╗╚╝╠╣╦╩╬#*+]+$/
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const l = stripAnsi(lines[i]).trim()
-    if (l.length > 3 && !noise.test(l)) {
-      return l.length > 80 ? l.slice(0, 77) + '…' : l
+// Dominant-Typ der extrahierten Zeilen bestimmen
+function dominantType(lines: string[]): BubbleType {
+  const counts: Record<BubbleType, number> = { input: 0, tool: 0, output: 0 }
+  lines.forEach(l => counts[lineType(l)]++)
+  return (Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0] as BubbleType)
+}
+
+// Letzte MAX_LINES sinnvolle Content-Zeilen extrahieren (bottom-up)
+function extractContentLines(rawOutput: string): string[] {
+  const lines = rawOutput.split('\n')
+  const result: string[] = []
+
+  for (let i = lines.length - 1; i >= 0 && result.length < MAX_LINES; i--) {
+    const clean = stripAnsi(lines[i]).trim()
+    if (!isNoise(clean)) {
+      // Zeile truncaten auf max 55 Zeichen
+      result.unshift(clean.length > 55 ? clean.slice(0, 52) + '…' : clean)
     }
   }
-  return null
+
+  return result
 }
 
 export function useSessionOutputDiff(sessionNames: string[]): Map<string, SessionActivity> {
   const [activities, setActivities] = useState<Map<string, SessionActivity>>(new Map())
-  const prevLinesRef = useRef<Map<string, string>>(new Map()) // sessionName → last raw output
+  const prevOutputRef = useRef<Map<string, string>>(new Map())
 
   useEffect(() => {
     if (sessionNames.length === 0) return
@@ -61,20 +87,16 @@ export function useSessionOutputDiff(sessionNames: string[]): Map<string, Sessio
             const data = await res.json()
             const raw: string = data.output || ''
 
-            const prev = prevLinesRef.current.get(name) ?? ''
+            const prev = prevOutputRef.current.get(name) ?? ''
 
-            // Only process if output changed
             if (raw !== prev) {
-              prevLinesRef.current.set(name, raw)
+              prevOutputRef.current.set(name, raw)
 
-              // Get last 10 non-empty lines for context
-              const lines = raw.split('\n').filter(l => l.trim().length > 0).slice(-10)
-              const bestLine = extractBestLine(lines)
-
-              if (bestLine) {
+              const lines = extractContentLines(raw)
+              if (lines.length > 0) {
                 updates.set(name, {
-                  text: bestLine,
-                  type: detectType(bestLine),
+                  lines,
+                  type: dominantType(lines),
                   ts: Date.now(),
                 })
               }
@@ -94,11 +116,10 @@ export function useSessionOutputDiff(sessionNames: string[]): Map<string, Sessio
       }
     }
 
-    // Initial poll
     poll()
     const iv = setInterval(poll, 2000)
     return () => clearInterval(iv)
-  }, [sessionNames.join(',')]) // Re-run when session list changes
+  }, [sessionNames.join(',')])
 
   return activities
 }
